@@ -16,6 +16,7 @@ Design:
 """
 from __future__ import annotations
 
+import collections
 import hashlib
 import json
 import logging
@@ -345,10 +346,42 @@ class ParseCacheL1:
     files when multiple builders consume the same file.
     """
 
-    def __init__(self, l2: ParseCacheL2 | None = None) -> None:
+    # Default cap for the source-text LRU: keeps at most this many file texts
+    # in memory simultaneously.  On a typical project the working set is small
+    # (builders read each file once), so 256 covers virtually all cases while
+    # preventing unbounded growth when a repo has thousands of source files.
+    _SOURCE_CACHE_MAX_ENTRIES: int = 256
+
+    def __init__(
+        self,
+        l2: ParseCacheL2 | None = None,
+        *,
+        max_file_mb: float = 5.0,
+        source_cache_max_entries: int | None = None,
+    ) -> None:
+        """Initialise the L1 in-memory cache.
+
+        Args:
+            l2: Optional L2 on-disk cache.
+            max_file_mb: Files larger than this threshold (in MiB) are SKIPPED —
+                their full-text is never loaded and an empty ParsedFile is
+                returned.  The skipped file is recorded in ``oversized_files``.
+                Default is 5.0 MiB.  Pass ``float('inf')`` to disable.
+            source_cache_max_entries: Maximum number of raw source strings to
+                retain in the LRU text cache.  Oldest entry is evicted when the
+                cap is reached.  Default: ``_SOURCE_CACHE_MAX_ENTRIES`` (256).
+        """
         self._l2 = l2
+        self._max_file_bytes: float = max_file_mb * 1024 * 1024
+        _cap = source_cache_max_entries if source_cache_max_entries is not None else self._SOURCE_CACHE_MAX_ENTRIES
+        self._source_cache_max: int = max(1, _cap)
         self._cache: dict[str, ParsedFile] = {}  # key: str(abs_path)
-        self._source_cache: dict[str, str] = {}  # key: str(abs_path); stores raw source
+        # Bounded LRU: OrderedDict keeps insertion order; we move-to-end on hit
+        # and pop the oldest entry when the cap is reached.
+        self._source_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
+
+        # Oversized-file tracking (consumed by cli_entry to populate meta)
+        self.oversized_files: list[dict] = []  # [{path, size_mb}]
 
         # Counters
         self.hits = 0           # L1 hits
@@ -384,6 +417,22 @@ class ParseCacheL1:
         self.misses += 1
         t0 = time.perf_counter()
 
+        # --- File-size guard (fast stat before read) ---
+        try:
+            file_bytes = abs_path.stat().st_size
+        except OSError:
+            file_bytes = 0
+        if file_bytes > self._max_file_bytes:
+            size_mb = file_bytes / (1024 * 1024)
+            _log.warning(
+                "ParseCacheL1: skipping oversized file %s (%.1f MiB > %.1f MiB limit)",
+                abs_path, size_mb, self._max_file_bytes / (1024 * 1024),
+            )
+            self.oversized_files.append({"path": str(abs_path), "size_mb": round(size_mb, 3)})
+            pf = _empty_parsed_file("")
+            self._cache[key] = pf
+            return pf
+
         # Read source
         try:
             source = abs_path.read_text(encoding="utf-8", errors="replace")
@@ -393,8 +442,11 @@ class ParseCacheL1:
             self._cache[key] = pf
             return pf
 
-        # Store source for potential reuse by other builders (avoids re-reading disk)
+        # Store source in bounded LRU cache (evict oldest when cap reached)
+        if key not in self._source_cache and len(self._source_cache) >= self._source_cache_max:
+            self._source_cache.popitem(last=False)  # evict oldest
         self._source_cache[key] = source
+        self._source_cache.move_to_end(key)  # mark as most-recently used
 
         content_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()[:32]
 
@@ -425,10 +477,14 @@ class ParseCacheL1:
         """Return cached source text if available, else None.
 
         Used by runtime/data_contract builders to avoid re-reading files
-        that were already read by get_or_parse().
+        that were already read by get_or_parse().  On hit the entry is
+        promoted to most-recently-used so it survives longer in the LRU.
         """
         key = str(abs_path)
-        return self._source_cache.get(key)
+        src = self._source_cache.get(key)
+        if src is not None:
+            self._source_cache.move_to_end(key)
+        return src
 
     def log_stats(self) -> None:
         """Log hit/miss stats at INFO level."""

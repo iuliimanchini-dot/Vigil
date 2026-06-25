@@ -107,13 +107,36 @@ def _collect_from_import_candidates(source: str) -> list[str]:
 _TS_EXTS = (".ts", ".tsx", ".js", ".jsx")
 
 
-def _collect_non_python_raw_data(project_dir: Path, include_roots: "Sequence[str] | None") -> "dict[str, dict]":
+def _collect_non_python_raw_data(
+    project_dir: Path,
+    include_roots: "Sequence[str] | None",
+    max_file_bytes: float = float("inf"),
+    oversized_files: "list[dict] | None" = None,
+    cancel_event: "Any | None" = None,
+) -> "dict[str, dict]":
     result: dict[str, dict] = {}
     for src_file in iter_source_files(project_dir, include_roots=include_roots):
+        if cancel_event is not None and cancel_event.is_set():
+            _log.info("_collect_non_python_raw_data: cancelled, stopping early")
+            break
         adapter = get_adapter_for_file(src_file)
         if adapter is None or adapter.language == "python" or not adapter.supports_structural:
             continue
         rel = _rel_posix(src_file, project_dir)
+        # File-size guard — skip oversized non-Python files
+        try:
+            file_bytes = src_file.stat().st_size
+        except OSError:
+            file_bytes = 0
+        if file_bytes > max_file_bytes:
+            size_mb = file_bytes / (1024 * 1024)
+            _log.warning(
+                "_collect_non_python_raw_data: skipping oversized file %s (%.1f MiB)",
+                src_file, size_mb,
+            )
+            if oversized_files is not None:
+                oversized_files.append({"path": str(src_file), "size_mb": round(size_mb, 3)})
+            continue
         try:
             content = src_file.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -261,6 +284,7 @@ def build_structural_map(
     include_roots: Sequence[str] | None = None,
     time_budget_s: float = 30.0,
     parse_cache: "Any | None" = None,
+    cancel_event: "Any | None" = None,
 ) -> list[StructuralEntry]:
     """Build Map 1 (structural) for a target project directory.
 
@@ -306,7 +330,14 @@ def build_structural_map(
             "build_structural_map: iter_py_files failed: %s" % exc
         ) from exc
 
+    # Derive max_file_bytes from parse_cache if available (keeps the limit consistent)
+    _max_file_bytes: float = getattr(parse_cache, "_max_file_bytes", float("inf"))
+    _oversized: list[dict] = getattr(parse_cache, "oversized_files", [])
+
     for abs_path in py_files:
+        if cancel_event is not None and cancel_event.is_set():
+            _log.info("build_structural_map: cancelled, stopping py_files loop early")
+            break
         rel = _rel_posix(abs_path, project_dir)
 
         # --- Fast path: use parse_cache if available ---
@@ -380,7 +411,13 @@ def build_structural_map(
         }
 
     # Pass 1b: non-Python structural extraction via registered adapters
-    non_py_raw = _collect_non_python_raw_data(project_dir, include_roots)
+    non_py_raw = _collect_non_python_raw_data(
+        project_dir,
+        include_roots,
+        max_file_bytes=_max_file_bytes,
+        oversized_files=_oversized,
+        cancel_event=cancel_event,
+    )
     raw_data.update(non_py_raw)
 
     _log.debug("build_structural_map: pass 1 done, %d files", len(raw_data))

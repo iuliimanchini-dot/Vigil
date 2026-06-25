@@ -65,10 +65,23 @@ def run_map_build(
     strict: bool = False,
     timeout_s: int = 300,
     output_dir=None,
+    max_file_mb: float = 5.0,
+    cancel_event=None,
 ) -> int:
     """Programmatic API for the map build pipeline. Deferred import.
 
-    See ``BRAIN.autoforensics.map_builder.cli_entry.run_map_build`` for full docs.
+    Args:
+        project_dir: Absolute (or resolvable) path to the target project root.
+        map: Map name to build, or "all" for the full pipeline.
+        dry_run: If True, build all maps in memory but do not write to disk.
+        strict: If True, return exit code 3 on warnings, 4 on new conflicts.
+        timeout_s: Timeout in seconds for the tracer (runtime map only).
+        output_dir: If given, writes maps here instead of <project_dir>/.cortex/maps/.
+        max_file_mb: Files larger than this threshold (MiB) are skipped.
+            Default: 5.0 MiB.  Pass float('inf') to disable.
+        cancel_event: Optional threading.Event; build stops early when set.
+
+    See ``cortex_map_builder.cli_entry.run_map_build`` for full docs.
     """
     from .cli_entry import run_map_build as _run  # noqa: PLC0415
     return _run(
@@ -78,6 +91,8 @@ def run_map_build(
         strict=strict,
         timeout_s=timeout_s,
         output_dir=output_dir,
+        max_file_mb=max_file_mb,
+        cancel_event=cancel_event,
     )
 
 

@@ -4,6 +4,7 @@ Design constraints (the user's machine hangs under heavy parallel runs):
 - At most MAX_CONCURRENT jobs running at any time (hard cap = 2).
 - Each job runs in exactly ONE threading.Thread — no thread pools.
 - Jobs are cancellable via a threading.Event that the worker can poll.
+- A per-job wall-clock timeout (default 600 s) caps runaway jobs automatically.
 - Results are stored in-process until explicitly retrieved.
 """
 from __future__ import annotations
@@ -15,11 +16,15 @@ from typing import Any, Callable
 
 MAX_CONCURRENT = 2   # Hard cap; callers get "busy" status when exceeded.
 
+# Default wall-clock timeout for a single job (seconds).
+DEFAULT_TIMEOUT_S: int = 600
+
 # Job status values
 STATUS_RUNNING   = "running"
 STATUS_DONE      = "done"
 STATUS_ERROR     = "error"
 STATUS_CANCELLED = "cancelled"
+STATUS_TIMEOUT   = "timeout"
 
 
 class _Job:
@@ -61,6 +66,14 @@ class JobRegistry:
         registry.status(job_id)   # -> {"job_id": ..., "status": "running"}
         registry.cancel(job_id)   # -> True / False
         registry.result(job_id)   # -> {"job_id": ..., "status": "done", "result": ...}
+
+    Timeout::
+
+        Each job has a wall-clock timeout (``timeout_s``).  When the job
+        exceeds it, its cancel_event is set and the status transitions to
+        ``"timeout"``.  The worker thread itself is NOT killed (Python does
+        not support that), but any cooperative worker that polls cancel_event
+        will stop promptly.
     """
 
     def __init__(self, max_concurrent: int = MAX_CONCURRENT) -> None:
@@ -81,7 +94,13 @@ class JobRegistry:
     # Public API
     # ------------------------------------------------------------------
 
-    def start(self, fn: Callable, *args: Any, **kwargs: Any) -> dict:
+    def start(
+        self,
+        fn: Callable,
+        *args: Any,
+        timeout_s: int = DEFAULT_TIMEOUT_S,
+        **kwargs: Any,
+    ) -> dict:
         """Start *fn* in a background thread and return {job_id, status}.
 
         Returns {"status": "busy", "job_id": None} when the concurrent cap
@@ -89,6 +108,15 @@ class JobRegistry:
 
         The cancel_event is injected as keyword argument ``cancel_event``
         only if *fn* accepts it (checked via __code__.co_varnames).
+
+        Args:
+            fn: Callable to run in a background thread.
+            *args: Positional arguments forwarded to *fn*.
+            timeout_s: Wall-clock timeout in seconds.  When the job runs
+                longer than this, its cancel_event is set and status
+                transitions to ``"timeout"``.  Default: ``DEFAULT_TIMEOUT_S``
+                (600 s).  Pass 0 to disable the timeout.
+            **kwargs: Keyword arguments forwarded to *fn*.
         """
         with self._lock:
             if self._running_count() >= self._max_concurrent:
@@ -113,18 +141,35 @@ class JobRegistry:
                 else:
                     result = fn(*args, **kwargs)
                 with job._lock:
-                    if job.status != STATUS_CANCELLED:
+                    if job.status != STATUS_CANCELLED and job.status != STATUS_TIMEOUT:
                         job.result = result
                         job.status = STATUS_DONE
             except Exception:
                 with job._lock:
-                    if job.status != STATUS_CANCELLED:
+                    if job.status != STATUS_CANCELLED and job.status != STATUS_TIMEOUT:
                         job.error = traceback.format_exc()
                         job.status = STATUS_ERROR
+
+        def _timeout_watcher() -> None:
+            """Wait timeout_s; if job is still running, cancel it."""
+            if timeout_s <= 0:
+                return
+            # Use the cancel_event as a convenient interruptible sleep:
+            # if the job finishes early it sets cancel_event — we detect
+            # that the job is no longer running and exit silently.
+            job.cancel_event.wait(timeout=timeout_s)
+            with job._lock:
+                if job.status == STATUS_RUNNING:
+                    job.cancel_event.set()
+                    job.status = STATUS_TIMEOUT
 
         t = threading.Thread(target=_worker, daemon=True)
         job.thread = t
         t.start()
+
+        tw = threading.Thread(target=_timeout_watcher, daemon=True)
+        tw.start()
+
         return {"job_id": job_id, "status": STATUS_RUNNING}
 
     def status(self, job_id: str) -> dict:
@@ -162,8 +207,8 @@ class JobRegistry:
 _registry = JobRegistry()
 
 
-def start(fn: Callable, *args: Any, **kwargs: Any) -> dict:
-    return _registry.start(fn, *args, **kwargs)
+def start(fn: Callable, *args: Any, timeout_s: int = DEFAULT_TIMEOUT_S, **kwargs: Any) -> dict:
+    return _registry.start(fn, *args, timeout_s=timeout_s, **kwargs)
 
 
 def status(job_id: str) -> dict:

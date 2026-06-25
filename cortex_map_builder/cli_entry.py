@@ -222,6 +222,7 @@ def _build_single_map(
     in_memory_acc: dict[str, list],
     parse_cache: "Any | None" = None,
     maps_dir_override: Path | None = None,
+    cancel_event: "Any | None" = None,
 ) -> tuple[list, list, dict, bool]:
     """Build one named map. Returns (entry_objects, entry_dicts, metadata, had_warning).
 
@@ -232,13 +233,16 @@ def _build_single_map(
     parse_cache   -- optional ParseCacheL1 instance; passed through to builders
                      that support it (structural, runtime, data_contract, authority).
     maps_dir_override -- optional override for maps directory (for --output-dir).
+    cancel_event  -- optional threading.Event; builder stops early when set.
     """
     t0 = time.perf_counter()
     had_warning = False
 
     if map_name == "structural":
         from .structural_builder import build_structural_map
-        entries_obj = build_structural_map(project_dir, parse_cache=parse_cache)
+        entries_obj = build_structural_map(
+            project_dir, parse_cache=parse_cache, cancel_event=cancel_event
+        )
 
     elif map_name == "data_contract":
         from .data_contract_builder import build_data_contract_map
@@ -418,6 +422,8 @@ def cmd_map_build(args: argparse.Namespace) -> int:
     output_dir = getattr(args, "output_dir", None)
     runtime_target = getattr(args, "runtime_target", None)
     json_mode = bool(getattr(args, "json", False))
+    max_file_mb = float(getattr(args, "max_file_mb", 5.0))
+    cancel_event = getattr(args, "cancel_event", None)
 
     target_maps_dir: Path | None = None
     if output_dir:
@@ -466,10 +472,33 @@ def cmd_map_build(args: argparse.Namespace) -> int:
     # project_dir may be a _remote_cache subdirectory.
     from .parse_cache import ParseCacheL1, ParseCacheL2  # noqa: PLC0415
     _parse_l2 = ParseCacheL2(real_project_dir)
-    _parse_l1 = ParseCacheL1(_parse_l2)
-    _log.debug("map-build: parse cache initialised (L2 at %s)", real_project_dir)
+    _parse_l1 = ParseCacheL1(_parse_l2, max_file_mb=max_file_mb)
+    _log.debug(
+        "map-build: parse cache initialised (L2 at %s, max_file_mb=%.1f)",
+        real_project_dir, max_file_mb,
+    )
+
+    # Maps whose acc entry is no longer needed once a later map has been built.
+    # refactor_boundary is the last consumer of everything, so we free all entries
+    # after building it.  findings is the last consumer of structural/runtime/etc.
+    # We clear the entire acc after refactor_boundary (or findings if that's last).
+    _LAST_CONSUMERS: dict[str, str] = {
+        "structural":        "refactor_boundary",
+        "data_contract":     "refactor_boundary",
+        "authority":         "refactor_boundary",
+        "runtime":           "refactor_boundary",
+        "conflict":          "refactor_boundary",
+        "hotspot":           "refactor_boundary",
+        "findings":          "refactor_boundary",
+        "refactor_boundary": "refactor_boundary",  # drop immediately
+    }
 
     for idx, map_name in enumerate(map_set, start=1):
+        # Honour cancel before starting each map
+        if cancel_event is not None and cancel_event.is_set():
+            _log.info("map-build: cancelled before building %s", map_name)
+            break
+
         _log.info("[%d/%d] Building map: %s", idx, total, map_name)
         try:
             entries_obj, entry_dicts, metadata, had_warning = _build_single_map(
@@ -480,6 +509,7 @@ def cmd_map_build(args: argparse.Namespace) -> int:
                 in_memory_acc,
                 parse_cache=_parse_l1,
                 maps_dir_override=target_maps_dir,
+                cancel_event=cancel_event,
             )
         except Exception as exc:  # noqa: BLE001
             _log.error("[%d/%d] %s: FAILED -- %s", idx, total, map_name, exc)
@@ -551,6 +581,19 @@ def cmd_map_build(args: argparse.Namespace) -> int:
                 no_color,
                 file=_progress_file,
             )
+
+        # Release in-memory entries for maps whose last downstream consumer
+        # is the map we just built.  This bounds peak RSS during the pipeline.
+        # entry_dicts (serialised dicts) are retained on the stack until
+        # write_map returns; entries_obj (dataclass instances) can be dropped
+        # once no future builder will call _make_repo_maps_from_accumulator.
+        maps_to_free = [
+            k for k, last in _LAST_CONSUMERS.items()
+            if last == map_name and k in in_memory_acc
+        ]
+        for _k in maps_to_free:
+            del in_memory_acc[_k]
+            _log.debug("map-build: freed in_memory_acc[%s] after %s", _k, map_name)
 
     # 4b. Log parse cache stats (debug summary)
     _parse_l1.log_stats()
@@ -635,6 +678,8 @@ def run_map_build(
     strict: bool = False,
     timeout_s: int = 300,
     output_dir: Path | None = None,
+    max_file_mb: float = 5.0,
+    cancel_event: "Any | None" = None,
 ) -> int:
     """Programmatic entry point for the map build pipeline.
 
@@ -652,6 +697,13 @@ def run_map_build(
             <project_dir>/.cortex/maps/.  The directory is created if absent.
             This is the sanctioned way for background workers to write to a
             temp directory before applying a semantic diff filter (see E1).
+        max_file_mb: Files larger than this threshold (MiB) are skipped during
+            the build.  Skipped files are listed in the result meta under
+            ``oversized_files``.  Default: 5.0 MiB.  Pass float('inf') to
+            disable the guard entirely.
+        cancel_event: Optional threading.Event.  When set, the build stops
+            after the current map finishes and returns exit code 0 with
+            partial results.
 
     Returns:
         Integer exit code:
@@ -673,5 +725,7 @@ def run_map_build(
         json=False,
         no_color=True,
         runtime_target=None,
+        max_file_mb=max_file_mb,
+        cancel_event=cancel_event,
     )
     return cmd_map_build(ns)
