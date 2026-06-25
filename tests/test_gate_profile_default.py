@@ -129,13 +129,21 @@ class TestAncestorWalkFallback:
         assert profile.profile_name == "cortex-default"
         assert Path(profile.profile_path).resolve() == _SHIPPED_PROFILE.resolve()
 
-    def test_no_profile_anywhere_returns_none(self, tmp_path):
-        """An isolated tmp dir with no profile in any ancestor → None (no error)."""
+    def test_no_profile_anywhere_falls_back_to_packaged_default(self, tmp_path):
+        """An isolated tmp dir with no profile in any ancestor falls back to the
+        package's shipped default (FP fix: was returning None → strict
+        code-defaults; now returns the documented 750/1000 profile)."""
         proj = tmp_path / "isolated"
         proj.mkdir()
         (proj / "main.py").write_text("x = 1\n", encoding="utf-8")
         # tmp_path is outside the repo, so no ancestor gate_profile.json exists.
-        assert _load_gate_profile_if_present(proj) is None
+        profile = _load_gate_profile_if_present(proj)
+        assert profile is not None, (
+            "External target with no ancestor profile must fall back to the "
+            "package's shipped gate_profile.json, not None / strict code-defaults"
+        )
+        assert profile.profile_name == "cortex-default"
+        assert profile.size_thresholds == _EXPECTED_THRESHOLDS
 
     def test_target_local_profile_wins_over_ancestor(self, tmp_path):
         """A profile co-located with the target takes precedence over any

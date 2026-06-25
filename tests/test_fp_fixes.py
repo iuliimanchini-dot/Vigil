@@ -353,8 +353,10 @@ class TestRepoProfileLoading:
         )
         assert ctx.repo_profile.profile_name == "ctx_test"
 
-    def test_no_profile_file_behavior_unchanged(self, tmp_path):
-        """If no gate_profile.json exists, ctx.repo_profile stays None — no error."""
+    def test_no_profile_file_falls_back_to_packaged_default(self, tmp_path):
+        """If no gate_profile.json exists in the target or any ancestor, the
+        loader falls back to the package's shipped default profile (FP fix:
+        previously left repo_profile=None → strict code-defaults)."""
         proj = tmp_path / "no_profile"
         proj.mkdir()
         (proj / "main.py").write_text("x = 1\n", encoding="utf-8")
@@ -362,8 +364,9 @@ class TestRepoProfileLoading:
         from cortex_forensic.self_audit import build_synthetic_context, discover_source_files
         source_files = discover_source_files(proj)
         ctx = build_synthetic_context(proj, source_files)
-        # No exception; profile is None when no file present
-        assert ctx.repo_profile is None
+        # No exception; packaged default profile is used when no file present.
+        assert ctx.repo_profile is not None
+        assert ctx.repo_profile.profile_name == "cortex-default"
 
 
 # ===========================================================================

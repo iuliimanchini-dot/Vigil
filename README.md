@@ -301,53 +301,73 @@ duplication cluster, so the per-`check_id` breakdown is wide. Still < 3 k tokens
 
 ### Determinism
 
-`run_forensic_audit` was run **twice** on each target and the sorted
-`(check_id, file, line)` finding set was **identical** every time (filelock
-32 ≡ 32, click 54 ≡ 54, mcp 110 ≡ 110). No ordering or count drift.
+`run_forensic_audit` is deterministic: run twice on each target, the sorted
+`(check_id, file, line)` finding set is identical (no ordering or count drift).
 
-### Honest false-positive assessment
+### False-positive reduction on clean code (2026-06)
 
-The point of this section is to be straight about signal quality on **clean,
-idiomatic, well-maintained** third-party code — where a sane profile should find
-*little*. `filelock` (32 findings, all 32 inspected against the cited
-`file:line`) is the representative target:
+The default gate selection was re-tuned to cut the ~50 % false-positive rate
+observed on clean, idiomatic third-party code. Inspected baseline vs. current
+on `filelock` (every finding checked against the cited `file:line`):
 
-| `check_id` | n | Verdict | Why |
-|------------|--:|---------|-----|
-| `duplication.text_block` | 15 | **noise (true but not actionable)** | Verbatim **docstrings** (`:param:` lines) and identical keyword-only parameter lists shared between the sync (`_api.py`) and async (`asyncio.py`) lock twins. The text genuinely repeats, but (a) you cannot/should-not dedupe shared docstrings, and (b) **one** duplicated block emits ~12 separate findings (per-line inflation). |
-| `god_object_zones.zone_inflation` | 7 | **false positive** | "Zones" are function-name prefixes from a fixed verb list (`acquire/release/read/write/open/close/parse/validate/run`). A lock library's natural method names. `_read_write.py` / `_soft_rw/_sync.py` are single cohesive read-write-lock classes flagged as multi-responsibility "god objects" purely by domain-vocabulary collision. |
-| `size_complexity.zone_overload` | 5 | **false positive (duplicate mechanism)** | Same zone-prefix logic, lower threshold — re-flags files `god_object_zones` already flagged. |
-| `broad_except.base_exception` | 2 | **false positive** | `_api.py:513`, `asyncio.py:268` are `except BaseException: <decrement counter>; raise` — the textbook correct cancel-cleanup idiom. It re-raises; it does **not** swallow. The "prevents clean shutdown" claim is wrong. |
-| `broad_except.hidden_sentinel.bare_or_base` | 2 | **false positive** | Same two re-raising sites; "silently discards the error" is false (bare `raise` on the next line). |
-| `size.file_warn` | 1 | **true, actionable** | `_soft_rw/_sync.py` is 858 lines > 750. A real, factual signal. |
+| Target | findings before | findings after | actual FPs after |
+|--------|----------------:|---------------:|-----------------:|
+| `filelock` | 32 | **2** | **0** |
+| `click`    | 54 | **33** | low (mostly real `size.*` / `broad_except.swallow`) |
+| `mcp`      | 110 | **43** | low (mostly real `size.*` / `broad_except.swallow`) |
 
-**FP rate (strict): 16/32 ≈ 50 %** are outright false (`god_object` + `zone_overload`
-+ both `broad_except` sub-checks). Counting the docstring-duplication cluster as
-non-actionable noise as well, **only 1 of 32 findings (~3 %) is genuinely
-actionable**. The noisiest gate is the **zone family** (`god_object_zones` +
-`size_complexity.zone_overload` = 12/32): it infers "responsibility zones" from
-function-name prefixes, so any library whose domain verbs overlap the keyword set
-(locks, I/O, parsers, schedulers) trips it on perfectly cohesive classes.
+The two `filelock` findings that remain are both honest: one `size.file_warn`
+(`_soft_rw/_sync.py` is genuinely 858 lines > 750) and one informational
+`meta.git_unavailable` (see below). Zero false claims about the code.
 
-A second structural FP shows up on `click`/`mcp`:
-`api.public_function_signature_change` (7 on click, 10 on mcp) runs in **degraded
-mode** when there is no git "before" snapshot (always the case on a fresh
-checkout) and falls back to a docstring-param-count-vs-signature heuristic. It
-fires on every documented **variadic** API — e.g. `click.decorators.option(*param_decls, cls=None, **attrs)`
-is reported as "signature possibly narrowed: 0 params vs 3 documented," which is
-simply false. Expect this check to misfire on any `*args/**kwargs` factory.
+Five fixes landed (each TDD'd in
+[`tests/test_forensic_fp_clean_code.py`](tests/test_forensic_fp_clean_code.py)):
 
-**Verdict: on clean third-party code this profile is noisy, not a tight signal.**
-The size/threshold gates (`size.*`) are honest and useful — they report real,
-factual breaches of published limits. The *structural-inference* gates
-(`god_object_zones`, `size_complexity.zone_overload`, and `api.public_function_signature_change`
-in degraded/no-git mode) are the noise source and account for the bulk of the
-false positives. For third-party or vendored code, disable the zone family and
-the signature-drift check via `.cortex/disabled_gates.json`
-(`["god_object_zones", "size_complexity", "api"]`) — then the remaining output is
-mostly trustworthy. The tools are **fast, light, and deterministic**; the
-*default gate selection* is tuned for a team auditing its own diffs, not for
-low-FP scanning of finished libraries.
+1. **`broad_except` cleanup-then-reraise.** `except BaseException: <cleanup>;
+   raise` (filelock `_api.py:513`, `asyncio.py:268`) is the correct cancel-
+   cleanup idiom — it *re-raises*, it does not swallow. Both the regex
+   (`broad_except.base_exception`/`.bare`) and AST
+   (`broad_except.hidden_sentinel.bare_or_base`) detectors now skip any handler
+   whose body contains a top-level `raise`. Genuine swallows (no re-raise) still
+   fire.
+2. **`duplication.text_block` inflation + docstrings.** One duplicated region no
+   longer emits one finding per sliding-window line (~13 → 1); windows of the
+   same file-set at adjacent start lines are merged into a single region. Lines
+   inside string literals (shared docstrings / `:param` blocks on sync↔async API
+   mirrors) and pure parameter-declaration lines are excluded. Genuine copy-
+   pasted **code** blocks are still detected.
+3. **Zone-inference gates are now opt-in.** `god_object_zones` infers
+   "responsibility zones" from function-name prefixes against a fixed verb list
+   (`acquire/release/read/write/open/close/...`); a cohesive read-write-lock
+   class collides with that vocabulary and is wrongly flagged — ~0 true
+   positives here. It is **off by default** (moved to an opt-in set in
+   `self_audit._NOISY_OPT_IN_GATES`) and runs only when explicitly requested
+   (`run_forensic_audit(target, gates=["god_object_zones"])` or
+   `--gates god_object_zones`). The twin `size_complexity.zone_overload` sub-
+   check, which used the *same* name-prefix logic and double-reported the same
+   files, was **removed** outright; `size_complexity` keeps its objective
+   size/function-length/nesting budget checks.
+4. **`api.public_function_signature_change` in no-git mode.** With no git
+   baseline (no work tree, or no changed file resolves at `HEAD~1`, e.g. a
+   vendored/`site-packages` dir) the old code fell back to a docstring-param-
+   count heuristic that fired on every documented variadic API
+   (`click.decorators.option(*param_decls, **attrs)` → "0 params vs 3
+   documented"). The whole signature-drift check is now **skipped without a git
+   baseline** and reported once via `meta.git_unavailable`. It runs normally
+   when a real `HEAD~1` diff exists.
+5. **Profile fallback foot-gun.** An external target with no ancestor
+   `gate_profile.json` previously fell back to the *strict* code-defaults
+   (600/800/4) instead of the shipped defaults (750/1000/5). The loader
+   (`self_audit._load_gate_profile_if_present`) now falls back to the package's
+   **own shipped** `gate_profile.json` (resolved relative to the package, at the
+   repo root) as the last resort. A target-local profile still wins.
+
+**Residual honesty.** The remaining output is dominated by the objective
+`size.*` gates (real breaches of published linter limits) and
+`broad_except.swallow` (genuine `except: pass`). These are trustworthy. The
+zone heuristic still exists as an *opt-in* capability for teams that want it on
+their own diffs — re-enable it per run via the `gates` argument. It is not
+deleted, just no longer in the default scan.
 
 ---
 

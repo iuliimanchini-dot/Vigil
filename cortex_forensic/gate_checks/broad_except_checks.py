@@ -18,21 +18,10 @@ _BROAD_EXCEPT_RE = re.compile(
     re.MULTILINE,
 )
 
-# ---------------------------------------------------------------------------
-# Pattern: bare except:  (catches SystemExit, KeyboardInterrupt, etc.)
-# ---------------------------------------------------------------------------
-_BARE_EXCEPT_RE = re.compile(
-    r'^\s*except\s*:\s*\n',
-    re.MULTILINE,
-)
-
-# ---------------------------------------------------------------------------
-# Pattern: except BaseException:  (same breadth problem as bare)
-# ---------------------------------------------------------------------------
-_BASE_EXCEPTION_RE = re.compile(
-    r'^\s*except\s+BaseException\s*(?:as\s+\w+)?\s*:',
-    re.MULTILINE,
-)
+# NOTE: bare ``except:`` and ``except BaseException:`` are detected via AST in
+# _check_bare_and_base_handlers (not regex) so the handler BODY can be inspected
+# for a re-raise. A line-only regex cannot tell a swallow from the correct
+# cancel-cleanup idiom (``except BaseException: <cleanup>; raise``).
 
 # _EXCEPT_RETURN_SENTINEL_RE was removed (fix 3): the regex matched ANY exception
 # type including narrow ones (OSError, ValueError) causing false positives.
@@ -53,6 +42,91 @@ def _is_broad_handler(handler: ast.ExceptHandler) -> bool:
             if isinstance(elt, ast.Name) and elt.id in _BROAD_EXCEPTION_NAMES:
                 return True
     return False
+
+
+def _reraises(handler: ast.ExceptHandler) -> bool:
+    """Return True if the handler body re-raises the exception.
+
+    A ``raise`` statement at the TOP LEVEL of the handler body — either a bare
+    ``raise`` (re-raise current exception) or ``raise <something>`` (chain /
+    translate) — means the error propagates. This is the cancel-cleanup idiom::
+
+        except BaseException:
+            <cleanup>
+            raise
+
+    which is correct and must NOT be flagged as a swallow. Verified against
+    filelock/_api.py:513-517.
+
+    Only top-level statements of the handler body are considered: a ``raise``
+    nested inside an inner ``try``/``if`` that the broad handler could still
+    swallow does not count as a guaranteed re-raise.
+    """
+    return any(isinstance(stmt, ast.Raise) for stmt in handler.body)
+
+
+def _check_bare_and_base_handlers(text: str, snapshot_path: str, findings: list) -> None:
+    """AST-based bare-except / except-BaseException detector.
+
+    Replaces the line-only regex checks (_BARE_EXCEPT_RE / _BASE_EXCEPTION_RE)
+    so the handler BODY can be inspected: a handler that re-raises
+    (``except BaseException: ...; raise``) is the correct cancel-cleanup idiom
+    and is NOT flagged. Genuine swallows (bare/BaseException with no re-raise)
+    are still flagged.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        for handler in node.handlers:
+            is_bare = handler.type is None
+            is_base = (
+                isinstance(handler.type, ast.Name)
+                and handler.type.id == "BaseException"
+            )
+            if not (is_bare or is_base):
+                continue
+            if _reraises(handler):
+                # Cancel-cleanup idiom — re-raises, does not swallow.
+                continue
+            line_no = getattr(handler, "lineno", 0) or 0
+            if is_bare:
+                _emit(
+                    findings,
+                    check_id="broad_except.bare",
+                    snapshot_path=snapshot_path,
+                    line_no=line_no,
+                    title=f"Bare 'except:' in {snapshot_path}:{line_no}",
+                    summary=(
+                        f"File {snapshot_path} line {line_no} uses a bare 'except:' clause which "
+                        "catches all exceptions including SystemExit and KeyboardInterrupt. "
+                        "This prevents clean process shutdown and hides all errors."
+                    ),
+                    repair_kind=RepairKind.REMOVE_FALLBACK.value,
+                    executor_action="Narrow exception to specific type",
+                    proof_required="No broad except in file",
+                    allowlist_allowed=False,
+                )
+            else:
+                _emit(
+                    findings,
+                    check_id="broad_except.base_exception",
+                    snapshot_path=snapshot_path,
+                    line_no=line_no,
+                    title=f"'except BaseException' in {snapshot_path}:{line_no}",
+                    summary=(
+                        f"File {snapshot_path} line {line_no} catches BaseException, which includes "
+                        "SystemExit and KeyboardInterrupt. This is equivalent to a bare except and "
+                        "prevents clean process shutdown."
+                    ),
+                    repair_kind=RepairKind.REMOVE_FALLBACK.value,
+                    executor_action="Narrow exception to specific type",
+                    proof_required="No broad except in file",
+                    allowlist_allowed=False,
+                )
 
 
 def _handler_returns_sentinel(handler: ast.ExceptHandler) -> tuple[bool, str]:
@@ -196,45 +270,10 @@ def run_broad_except_checks(ctx: PostExecGateContext):
                 allowlist_allowed=False,
             )
 
-        # --- broad_except.bare: bare except: ---
-        for match in _BARE_EXCEPT_RE.finditer(text):
-            line_no = text[:match.start()].count("\n") + 1
-            _emit(
-                findings,
-                check_id="broad_except.bare",
-                snapshot_path=normalized,
-                line_no=line_no,
-                title=f"Bare 'except:' in {normalized}:{line_no}",
-                summary=(
-                    f"File {normalized} line {line_no} uses a bare 'except:' clause which "
-                    "catches all exceptions including SystemExit and KeyboardInterrupt. "
-                    "This prevents clean process shutdown and hides all errors."
-                ),
-                repair_kind=RepairKind.REMOVE_FALLBACK.value,
-                executor_action="Narrow exception to specific type",
-                proof_required="No broad except in file",
-                allowlist_allowed=False,
-            )
-
-        # --- broad_except.base_exception: except BaseException: ---
-        for match in _BASE_EXCEPTION_RE.finditer(text):
-            line_no = text[:match.start()].count("\n") + 1
-            _emit(
-                findings,
-                check_id="broad_except.base_exception",
-                snapshot_path=normalized,
-                line_no=line_no,
-                title=f"'except BaseException' in {normalized}:{line_no}",
-                summary=(
-                    f"File {normalized} line {line_no} catches BaseException, which includes "
-                    "SystemExit and KeyboardInterrupt. This is equivalent to a bare except and "
-                    "prevents clean process shutdown."
-                ),
-                repair_kind=RepairKind.REMOVE_FALLBACK.value,
-                executor_action="Narrow exception to specific type",
-                proof_required="No broad except in file",
-                allowlist_allowed=False,
-            )
+        # --- broad_except.bare + broad_except.base_exception: AST-based ---
+        # Re-raising handlers (cancel-cleanup idiom) are skipped — see
+        # _check_bare_and_base_handlers / _reraises.
+        _check_bare_and_base_handlers(text, normalized, findings)
 
         # --- broad_except.return_none: AST-based check (only broad catches) ---
         _check_broad_return_sentinel(text, normalized, findings)

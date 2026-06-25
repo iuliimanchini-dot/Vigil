@@ -67,6 +67,20 @@ def _is_bare_or_base(handler: ast.ExceptHandler) -> bool:
     return False
 
 
+def _reraises(handler: ast.ExceptHandler) -> bool:
+    """Return True if the handler re-raises at the top level of its body.
+
+    ``except BaseException: <cleanup>; raise`` (the cancel-cleanup idiom) and
+    ``raise SomeError(...) from exc`` (translate-and-propagate) both let the
+    error propagate — they are NOT silent swallows and must not be flagged.
+    Verified against filelock/_api.py:513-517 and asyncio.py:268-270.
+
+    Only top-level ``raise`` statements count; a ``raise`` buried in a nested
+    ``try``/``if`` is not a guaranteed re-raise.
+    """
+    return any(isinstance(stmt, ast.Raise) for stmt in handler.body)
+
+
 def _exception_names(node: ast.expr | None) -> tuple[str, ...]:
     """Return a flat tuple of exception class names referenced by ``node``.
 
@@ -255,7 +269,12 @@ def _classify_handler(
       1. bare/BaseException (most severe)
       2. silent sentinel return
       3. log-then-swallow
+
+    A handler that re-raises at the top level of its body is the cancel-cleanup
+    idiom (propagates the error) and is never flagged.
     """
+    if _reraises(handler):
+        return False, "", ""
     if _is_bare_or_base(handler):
         type_name = "bare except" if handler.type is None else "except BaseException"
         return True, "broad_except.hidden_sentinel.bare_or_base", type_name

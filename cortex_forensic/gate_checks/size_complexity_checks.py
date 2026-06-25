@@ -6,7 +6,6 @@ from cortex_forensic._shared import EvidenceReference, GateCategory, GateImpact,
 from cortex_forensic.gate_models import PostExecGateContext
 from ..source_analysis import extract_functions, get_language_id, is_source_file
 from .common import build_check_result, build_finding, is_generated_file, iter_touched_snapshots, max_nesting_depth, normalize_path
-from .god_object_zones_checks import _collect_zones
 
 _log = logging.getLogger(__name__)
 
@@ -41,11 +40,13 @@ def _suppress_for_data_module(
                 return True
     return False
 
-# A file that exposes this many distinct responsibility zones triggers a
-# size_complexity.zone_overload finding, independent of its LOC count.
-# Intentionally higher than god_object_zones.MIN_ZONE_COUNT (3) because
-# size_complexity focuses on outright complexity budget, not god-object policy.
-_ZONE_OVERLOAD_THRESHOLD: int = 4
+# NOTE: the size_complexity.zone_overload sub-check was REMOVED (FP fix).
+# It inferred "responsibility zones" from function-name prefixes — the exact
+# same name-prefix heuristic as god_object_zones — and double-reported every
+# file that god_object_zones already flagged (e.g. 7 + 5 findings on the same
+# filelock files). The zone heuristic now has a single home in the opt-in
+# god_object_zones gate (see self_audit._NOISY_OPT_IN_GATES). size_complexity
+# keeps only its objective size / function-length / nesting budget checks.
 
 
 def run_size_complexity_checks(ctx: PostExecGateContext):
@@ -246,45 +247,8 @@ def run_size_complexity_checks(ctx: PostExecGateContext):
                             executor_action=f"Watch {snapshot.path} — nesting depth {nesting} approaching {nest_revise} revise threshold",
                         )
                     )
-        if get_language_id(snapshot.path) == "python":
-            zones = _collect_zones(snapshot.text)
-            zone_count = len(zones)
-            if zone_count >= _ZONE_OVERLOAD_THRESHOLD:
-                _log.info(
-                    "size_complexity: %s has %d responsibility zones -- emitting zone_overload finding",
-                    snapshot.path,
-                    zone_count,
-                )
-                findings.append(
-                    build_finding(
-                        check_id="size_complexity.zone_overload",
-                        category=GateCategory.SIZE_COMPLEXITY,
-                        title=f"Multi-zone file {snapshot.path}: {zone_count} responsibility zones exceeds complexity budget",
-                        severity=GateSeverity.MEDIUM,
-                        impact=GateImpact.REVISE,
-                        summary=(
-                            f"{snapshot.path} exposes {zone_count} distinct responsibility zones "
-                            f"({sorted(zones)}), exceeding the complexity budget of "
-                            f"{_ZONE_OVERLOAD_THRESHOLD}.  Consider splitting into focused modules."
-                        ),
-                        recommendation=(
-                            "Extract each responsibility zone into its own module.  "
-                            "A single module should own one primary concern."
-                        ),
-                        evidence=[EvidenceReference(kind="file", path=snapshot.path)],
-                        repair_kind=RepairKind.SPLIT_MODULE.value,
-                        executor_action=f"Split {snapshot.path} — {zone_count} responsibility zones ({sorted(zones)}); one module per concern",
-                        proof_required="file below threshold; grep confirms no logic removed",
-                        allowlist_allowed=False,
-                    )
-                )
-            else:
-                _log.debug(
-                    "size_complexity: %s has %d zone(s) -- below zone_overload threshold of %d",
-                    snapshot.path,
-                    zone_count,
-                    _ZONE_OVERLOAD_THRESHOLD,
-                )
+        # size_complexity.zone_overload removed (FP fix): name-prefix zone
+        # inference now lives only in the opt-in god_object_zones gate.
     return build_check_result(check_id="size_complexity", category=GateCategory.SIZE_COMPLEXITY, findings=findings)
 
 

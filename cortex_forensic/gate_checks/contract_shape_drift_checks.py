@@ -13,7 +13,11 @@ Severities:
 api.public_function_signature_change sub-check (G.9):
   Compares public function parameter lists between prior (HEAD~1) and current.
   - Parameter removed or renamed (positional shift)  -> HIGH / REVISE
-  - Degraded mode (no prior snapshot): fewer params than docstring describes -> WARN / WARN
+  - No git baseline (no work tree, or no changed file resolves at HEAD~1):
+    the whole signature check is SKIPPED and reported once via
+    meta.git_unavailable. The old docstring-param-count degraded heuristic was
+    removed — it produced false positives on documented variadic APIs
+    (``option(*param_decls, **attrs)``).
   allowlist_allowed=False for all signature findings.
 
 F18a (2026-04-23): AI-Host-specific new-class checks moved to
@@ -37,7 +41,7 @@ from cortex_forensic._shared import EvidenceReference, GateCategory, GateImpact,
 from cortex_forensic.gate_models import PostExecGateContext
 from ..source_analysis import is_source_file
 from .common import build_check_result, build_finding, normalize_path
-from cortex_forensic._git_utils import git_show as _git_show
+from cortex_forensic._git_utils import git_show as _git_show, git_has_repo as _git_has_repo
 
 _log = logging.getLogger(__name__)
 
@@ -158,31 +162,9 @@ def _extract_public_func_signatures(content: str) -> dict[str, list[str]]:
     return result
 
 
-def _count_docstring_params(content: str, func_name: str) -> int:
-    """Heuristic: count ``:param`` / ``Args:`` entries in the docstring of
-    *func_name* as a proxy for the expected number of parameters.
-
-    Used when prior snapshot is unavailable (degraded mode).
-    Returns 0 if no docstring or no param entries found.
-    """
-    try:
-        tree = ast.parse(content)
-    except SyntaxError:
-        return 0
-
-    for node in ast.iter_child_nodes(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        if node.name != func_name:
-            continue
-        docstring = ast.get_docstring(node) or ""
-        if not docstring:
-            return 0
-        # Support both Sphinx-style (:param x:) and Google-style (under Args:).
-        sphinx_params = re.findall(r":param\s+\w+", docstring)
-        google_params = re.findall(r"^\s{4,}\w+\s*:", docstring, re.MULTILINE)
-        return max(len(sphinx_params), len(google_params))
-    return 0
+# _count_docstring_params was removed with the no-git degraded-mode signature
+# heuristic (FP fix): counting :param/Args: docstring entries as a proxy for
+# expected param count misfired on documented variadic APIs.
 
 
 def _run_api_signature_checks(
@@ -192,119 +174,74 @@ def _run_api_signature_checks(
 ) -> list:
     """Return findings for public function signature changes in a single file.
 
-    When *prior_content* is available, compare parameter lists directly.
-    When *prior_content* is None (new file or git unavailable), fall back to
-    comparing current param count against docstring-described param count.
+    Compares parameter lists against the prior git snapshot. When
+    *prior_content* is None the file is new (no prior to diff) and nothing is
+    emitted — the caller only invokes this when a real git baseline exists for
+    the change set, so there is no docstring-heuristic degraded mode any more
+    (it produced false positives on documented variadic APIs).
     """
     from cortex_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity
 
+    if prior_content is None:
+        # New file — no prior signature to diff against. Not a regression.
+        return []
+
     findings_out = []
     current_sigs = _extract_public_func_signatures(current_content)
-
-    if prior_content is not None:
-        prior_sigs = _extract_public_func_signatures(prior_content)
-        for func_name, current_params in current_sigs.items():
-            if func_name not in prior_sigs:
-                # New function — not a regression.
-                continue
-            prior_params = prior_sigs[func_name]
-            if prior_params == current_params:
-                continue
-            # Detect removed or renamed (positional mismatch) parameters.
-            removed = [p for p in prior_params if p not in current_params]
-            if not removed:
-                # Only additions — not a breaking change.
-                continue
-            findings_out.append(
-                build_finding(
-                    check_id="api.public_function_signature_change",
-                    category=GateCategory.DRIFT,
-                    title=(
-                        f"Public API signature changed: {func_name} — "
-                        f"parameter(s) removed/renamed"
-                    ),
-                    severity=GateSeverity.HIGH,
-                    impact=GateImpact.REVISE,
-                    summary=(
-                        f"{normalized}::{func_name} — prior params: {prior_params}, "
-                        f"current params: {current_params}. "
-                        f"Removed/renamed: {removed}."
-                    ),
-                    recommendation=(
-                        f"Public API signature changed: {func_name}. "
-                        f"Either revert, add deprecation shim, or document as breaking change."
-                    ),
-                    evidence=[
-                        EvidenceReference(
-                            kind="file",
-                            path=normalized,
-                            detail=(
-                                f"func {func_name}: prior={prior_params}, "
-                                f"current={current_params}"
-                            ),
-                        )
-                    ],
-                    repair_kind=RepairKind.FIX_CONTRACT.value,
-                    executor_action=(
-                        f"Public API signature changed: {func_name}. "
-                        f"Either revert, add deprecation shim, or document as breaking change."
-                    ),
-                    proof_required=(
-                        "all external callers updated; deprecation warning added if kept; "
-                        "CHANGELOG entry"
-                    ),
-                    allowlist_allowed=False,
-                )
-            )
-    else:
-        # Degraded mode: no prior snapshot.  Compare current param count against
-        # what the docstring claims.
-        for func_name, current_params in current_sigs.items():
-            non_variadic = [p for p in current_params if not p.startswith(("*", "**"))]
-            doc_count = _count_docstring_params(current_content, func_name)
-            if doc_count > 0 and len(non_variadic) < doc_count:
-                findings_out.append(
-                    build_finding(
-                        check_id="api.public_function_signature_change",
-                        category=GateCategory.DRIFT,
-                        title=(
-                            f"Public API signature possibly narrowed: {func_name} "
-                            f"has fewer params than docstring describes"
+    prior_sigs = _extract_public_func_signatures(prior_content)
+    for func_name, current_params in current_sigs.items():
+        if func_name not in prior_sigs:
+            # New function — not a regression.
+            continue
+        prior_params = prior_sigs[func_name]
+        if prior_params == current_params:
+            continue
+        # Detect removed or renamed (positional mismatch) parameters.
+        removed = [p for p in prior_params if p not in current_params]
+        if not removed:
+            # Only additions — not a breaking change.
+            continue
+        findings_out.append(
+            build_finding(
+                check_id="api.public_function_signature_change",
+                category=GateCategory.DRIFT,
+                title=(
+                    f"Public API signature changed: {func_name} — "
+                    f"parameter(s) removed/renamed"
+                ),
+                severity=GateSeverity.HIGH,
+                impact=GateImpact.REVISE,
+                summary=(
+                    f"{normalized}::{func_name} — prior params: {prior_params}, "
+                    f"current params: {current_params}. "
+                    f"Removed/renamed: {removed}."
+                ),
+                recommendation=(
+                    f"Public API signature changed: {func_name}. "
+                    f"Either revert, add deprecation shim, or document as breaking change."
+                ),
+                evidence=[
+                    EvidenceReference(
+                        kind="file",
+                        path=normalized,
+                        detail=(
+                            f"func {func_name}: prior={prior_params}, "
+                            f"current={current_params}"
                         ),
-                        severity=GateSeverity.MEDIUM,
-                        impact=GateImpact.WARN,
-                        summary=(
-                            f"{normalized}::{func_name} — current params ({len(non_variadic)}): "
-                            f"{non_variadic}; docstring describes {doc_count} param(s). "
-                            f"Prior snapshot unavailable — degraded detection."
-                        ),
-                        recommendation=(
-                            f"Public API signature may have been narrowed: {func_name}. "
-                            f"Verify current param list matches documented API. "
-                            f"If intentional, update the docstring."
-                        ),
-                        evidence=[
-                            EvidenceReference(
-                                kind="file",
-                                path=normalized,
-                                detail=(
-                                    f"func {func_name}: {len(non_variadic)} params vs "
-                                    f"{doc_count} documented"
-                                ),
-                            )
-                        ],
-                        repair_kind=RepairKind.FIX_CONTRACT.value,
-                        executor_action=(
-                            f"Public API signature changed: {func_name}. "
-                            f"Either revert, add deprecation shim, or document as breaking change."
-                        ),
-                        proof_required=(
-                            "all external callers updated; deprecation warning added if kept; "
-                            "CHANGELOG entry"
-                        ),
-                        allowlist_allowed=False,
                     )
-                )
+                ],
+                repair_kind=RepairKind.FIX_CONTRACT.value,
+                executor_action=(
+                    f"Public API signature changed: {func_name}. "
+                    f"Either revert, add deprecation shim, or document as breaking change."
+                ),
+                proof_required=(
+                    "all external callers updated; deprecation warning added if kept; "
+                    "CHANGELOG entry"
+                ),
+                allowlist_allowed=False,
+            )
+        )
 
     return findings_out
 
@@ -461,22 +398,59 @@ def run_contract_shape_drift_checks(ctx: PostExecGateContext):
     # G.9: api.public_function_signature_change sub-check — piggybacks on the
     # same per-file loop context already built above.  Re-walk changed_files_observed
     # to keep the two concerns cleanly separated inside this function.
-    for raw_path in ctx.changed_files_observed:
-        normalized = normalize_path(raw_path)
-        if not is_source_file(normalized):
-            continue
-        abs_path = ctx.project_dir / normalized
-        try:
-            current = abs_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            _log.debug(
-                "contract_shape_drift(sig): cannot read current file %s: %s",
-                normalized,
-                exc,
-            )
-            continue
-        prior = _git_show(normalized)
-        findings.extend(_run_api_signature_checks(normalized, prior, current))
+    #
+    # FP fix: signature-drift is only meaningful against a git baseline. The old
+    # degraded path fell back to a docstring-param-count heuristic that misfired
+    # on documented variadic APIs (``option(*param_decls, **attrs)`` with a
+    # 3-param docstring → "0 params vs 3 documented"; verified on click/mcp).
+    #
+    # "No baseline" covers two cases that both produce only false positives:
+    #   1. the target is not in a git work tree at all, OR
+    #   2. it is inside a work tree but NONE of the changed files have prior
+    #      content at HEAD~1 (e.g. a gitignored vendored / site-packages dir).
+    # In either case, skip the whole signature check and surface the skip ONCE
+    # via meta.git_unavailable instead of emitting per-file FPs. When a real
+    # baseline exists (at least one file resolves at HEAD~1) the check runs
+    # exactly as before.
+    source_paths = [
+        normalize_path(p) for p in ctx.changed_files_observed
+        if is_source_file(normalize_path(p))
+    ]
+    priors: dict[str, str | None] = {}
+    has_baseline = False
+    if _git_has_repo(ctx.project_dir):
+        for normalized in source_paths:
+            prior = _git_show(normalized)
+            priors[normalized] = prior
+            if prior is not None:
+                has_baseline = True
+
+    if not has_baseline:
+        from cortex_forensic.meta_findings import emit_meta_finding
+        emit_meta_finding(
+            "meta.git_unavailable",
+            path=str(ctx.project_dir),
+            detail=(
+                "api.public_function_signature_change skipped: no git baseline "
+                "available (signature-drift needs HEAD~1 to be meaningful)."
+            ),
+        )
+    else:
+        for normalized in source_paths:
+            abs_path = ctx.project_dir / normalized
+            try:
+                current = abs_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                _log.debug(
+                    "contract_shape_drift(sig): cannot read current file %s: %s",
+                    normalized,
+                    exc,
+                )
+                continue
+            prior = priors.get(normalized)
+            # Per-file: a new file (prior is None) in an otherwise-baselined repo
+            # is correctly a no-op inside _run_api_signature_checks.
+            findings.extend(_run_api_signature_checks(normalized, prior, current))
 
     return build_check_result(
         check_id="contract_shape_drift",

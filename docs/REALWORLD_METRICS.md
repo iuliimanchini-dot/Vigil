@@ -121,11 +121,44 @@ APIs, e.g. `click.decorators.option(*param_decls, cls=None, **attrs)` reported a
 `duplication.text_block_intra` dominates (48) — intra-file repeated blocks, the
 same per-line/per-block over-counting pattern seen on filelock.
 
-## Bottom line
+## Bottom line (original baseline — pre-fix)
 
 Fast, light, deterministic. The **size/threshold** gates report honest factual
 breaches. The **structural-inference** gates — the zone family and
 `api.public_function_signature_change` in degraded (no-git) mode — are the noise
-source and drive ~50 % strict FP on clean library code. For third-party/vendored
-code, disable them via `.cortex/disabled_gates.json`:
-`["god_object_zones", "size_complexity", "api"]`.
+source and drove ~50 % strict FP on clean library code.
+
+> The tables above describe the **pre-fix** baseline. The FP sources they
+> identify were fixed in the 2026-06 pass below.
+
+## Post-fix update (2026-06)
+
+The five structural FP sources above were fixed (TDD in
+`tests/test_forensic_fp_clean_code.py`). Re-measured with the same method:
+
+| Target | findings before | findings after | actual FPs after (inspected) |
+|--------|----------------:|---------------:|-----------------------------:|
+| filelock | 32  | **2**  | **0** (1 real `size.file_warn`, 1 informational `meta.git_unavailable`) |
+| click    | 54  | **33** | low — remaining are real `size.*` + `broad_except.swallow` |
+| mcp      | 110 | **43** | low — remaining are real `size.*` + `broad_except.swallow` |
+
+What changed:
+
+- `broad_except.{base_exception,bare,hidden_sentinel.bare_or_base}` now skip
+  handlers that re-raise (cancel-cleanup idiom) → the 4 filelock FPs gone.
+- `duplication.text_block` merges per-line sliding windows into one finding per
+  region and excludes docstring / param-list lines → the 15 filelock findings
+  collapse to 0 (they were all docstring / sync↔async param-list noise).
+- `god_object_zones` is **opt-in** (off by default) and the duplicate
+  `size_complexity.zone_overload` sub-check was removed → the 12 filelock zone
+  findings gone; capability still runnable via `gates=["god_object_zones"]`.
+- `api.public_function_signature_change` is **skipped without a git baseline**
+  (reported once as `meta.git_unavailable`) → the 7 click / 10 mcp variadic-API
+  FPs gone.
+- Profile loader falls back to the package's shipped `gate_profile.json`
+  (750/1000/5) for external targets instead of strict code-defaults (600/800/4).
+
+Residual output is dominated by the objective `size.*` gates and genuine
+`except: pass` (`broad_except.swallow`) — trustworthy. To run the zone heuristic
+on your own diffs, pass it explicitly via the `gates` argument; it is opt-in,
+not deleted.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import re
 
 from cortex_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
@@ -11,6 +12,41 @@ _log = logging.getLogger(__name__)
 
 # Bare identifier lines (import continuation: "GateFinding,") — exclude from text block windows
 _IMPORT_CONTINUATION_RE = re.compile(r"^[A-Za-z_]\w*,?$")
+
+# Pure parameter-declaration / call-argument continuation lines, e.g.
+#   ``timeout: float = 0.05,``  ``poll_interval=poll_interval,``  ``arg0=None,``
+# A long signature or call mirrored across sync↔async APIs is structure, not
+# copy-pasted logic — exclude these lines from the text-block window so the
+# detector does not fire on shared parameter lists.
+_PARAM_DECL_RE = re.compile(
+    r"^\*{0,2}[A-Za-z_]\w*\s*(?::\s*[^=]+?)?(?:=\s*[^,]+?)?,?$"
+)
+
+
+def _string_literal_lines(text: str) -> frozenset[int]:
+    """Return the set of 1-based line numbers that lie inside a string literal.
+
+    Covers docstrings and any multi-line string constant. Used to exclude
+    docstring / long-string content from the text-block duplication window:
+    shared docstrings (e.g. identical ``:param`` blocks on sync↔async API
+    mirrors) are documentation, not duplicated CODE.
+
+    Python only. Returns an empty set on SyntaxError (fail-open) — non-Python
+    files keep their previous behavior.
+    """
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return frozenset()
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            start = getattr(node, "lineno", None)
+            end = getattr(node, "end_lineno", None) or start
+            if start is None:
+                continue
+            lines.update(range(start, end + 1))
+    return frozenset(lines)
 
 _MAX_DUPLICATION_CHECK_FILES = 200  # Prevent rglob on massive projects
 
@@ -186,9 +222,21 @@ def run_duplication_checks(ctx: PostExecGateContext):
         if any(f"/{d}/" in f"/{norm_path}/" for d in _SKIP_DIRS):
             continue
         lines = snapshot.text.splitlines()
-        # Filter to meaningful lines (skip empty, comments, imports)
+        # Lines that sit inside a string literal (docstrings, long multi-line
+        # strings). Shared docstrings / :param blocks across sync↔async API
+        # mirrors are documentation, not duplicated CODE — exclude them.
+        docstring_lines = (
+            _string_literal_lines(snapshot.text)
+            if is_source_file(snapshot.path) and snapshot.path.endswith(".py")
+            else frozenset()
+        )
+        # Filter to meaningful lines (skip empty, comments, imports, docstrings,
+        # and pure parameter-declaration / argument-continuation lines).
         meaningful: list[tuple[int, str]] = []
         for i, line in enumerate(lines):
+            line_no = i + 1
+            if line_no in docstring_lines:
+                continue
             stripped = line.strip()
             if not stripped:
                 continue
@@ -196,7 +244,9 @@ def run_duplication_checks(ctx: PostExecGateContext):
                 continue
             if _IMPORT_CONTINUATION_RE.match(stripped):
                 continue
-            meaningful.append((i + 1, stripped))
+            if _PARAM_DECL_RE.match(stripped):
+                continue
+            meaningful.append((line_no, stripped))
 
         # Sliding window of _BLOCK_MIN_LINES
         for idx in range(len(meaningful) - _BLOCK_MIN_LINES + 1):
@@ -210,51 +260,95 @@ def run_duplication_checks(ctx: PostExecGateContext):
                 continue
             entries.append((snapshot.path, start_line))
 
-    # Report each unique block hash ONCE with all files, not O(N^2) pairs
+    # ── Collapse per-line-window inflation ──
+    # A single duplicated REGION of N lines produces N-_BLOCK_MIN_LINES+1
+    # distinct window hashes, all sharing the same set of files at adjacent
+    # start lines. Emitting one finding per hash inflated the count (~13
+    # findings for one shared block on filelock). Group the duplicate hashes by
+    # the set of files involved, then merge windows whose start lines are within
+    # _BLOCK_MIN_LINES of each other (contiguous/overlapping = same region) so
+    # each duplicated region yields exactly ONE finding.
+    #
+    # group key = frozenset of files; value = {file: [start_line, ...]}
+    region_groups: dict[frozenset, dict[str, list[int]]] = {}
     for block_hash, locations in block_hashes.items():
         if len(locations) < 2:
             continue
+        files_in_hash = frozenset(path for path, _ in locations)
+        if len(files_in_hash) >= 2:
+            key = files_in_hash
+        else:
+            # Intra-file: only meaningful if the SAME block repeats at >=2 spots.
+            only_file = next(iter(files_in_hash))
+            if len({ln for _, ln in locations}) < 2:
+                continue
+            key = files_in_hash
+        bucket = region_groups.setdefault(key, {})
+        for path, ln in locations:
+            bucket.setdefault(path, []).append(ln)
+
+    def _merge_starts(starts: list[int]) -> list[int]:
+        """Collapse start lines within _BLOCK_MIN_LINES of each other into the
+        first line of each contiguous region."""
+        if not starts:
+            return []
+        ordered = sorted(set(starts))
+        regions = [ordered[0]]
+        for ln in ordered[1:]:
+            if ln - regions[-1] >= _BLOCK_MIN_LINES:
+                regions.append(ln)
+        return regions
+
+    for files_key, per_file in region_groups.items():
         if _text_block_count >= _MAX_TEXT_BLOCK_FINDINGS:
             break
-        unique_files = sorted({path for path, _ in locations})
+        unique_files = sorted(per_file.keys())
+        # Region anchor = first start line in each file (after merging).
+        merged_per_file = {f: _merge_starts(per_file[f]) for f in unique_files}
+
         if len(unique_files) >= 2:
-            # Cross-file duplication — report once per unique block hash
-            file_lines_map: dict[str, int] = {}
-            for p, ln in locations:
-                if p not in file_lines_map:
-                    file_lines_map[p] = ln
-            _text_block_count += 1
-            file_list = ", ".join(f"{f} (line {file_lines_map[f]})" for f in unique_files[:5])
-            suffix = f" and {len(unique_files) - 5} more" if len(unique_files) > 5 else ""
-            findings.append(
-                build_finding(
-                    check_id="duplication.text_block",
-                    category=GateCategory.DUPLICATION,
-                    title="Repeated text block across files",
-                    severity=GateSeverity.MEDIUM,
-                    impact=GateImpact.REVISE,
-                    summary=(
-                        f"Duplicated {_BLOCK_MIN_LINES}+ line block found in {len(unique_files)} files: "
-                        f"{file_list}{suffix}"
-                    ),
-                    recommendation=(
-                        "Extract the repeated block into a shared function, template, or constant. "
-                        "If the files belong to the same package — add a `shared.py` or `utils.py` module there. "
-                        "If they span multiple packages — move the helper to the nearest common ancestor package."
-                    ),
-                    evidence=[
-                        EvidenceReference(kind="file", path=f, detail=f"line:{file_lines_map[f]}")
-                        for f in unique_files[:5]
-                    ],
-                    repair_kind=RepairKind.EXTRACT_SHARED.value,
-                    executor_action=f"Extract duplicated block from {unique_files[0]} et al. into shared helper; replace each occurrence with a call",
-                    proof_required="no repeated block; tests pass",
+            # One cross-file finding per duplicated region. The number of regions
+            # is the max region count across the involved files.
+            region_count = max(len(v) for v in merged_per_file.values()) or 1
+            for region_idx in range(region_count):
+                if _text_block_count >= _MAX_TEXT_BLOCK_FINDINGS:
+                    break
+                file_lines_map = {
+                    f: merged_per_file[f][min(region_idx, len(merged_per_file[f]) - 1)]
+                    for f in unique_files
+                }
+                _text_block_count += 1
+                file_list = ", ".join(f"{f} (line {file_lines_map[f]})" for f in unique_files[:5])
+                suffix = f" and {len(unique_files) - 5} more" if len(unique_files) > 5 else ""
+                findings.append(
+                    build_finding(
+                        check_id="duplication.text_block",
+                        category=GateCategory.DUPLICATION,
+                        title="Repeated text block across files",
+                        severity=GateSeverity.MEDIUM,
+                        impact=GateImpact.REVISE,
+                        summary=(
+                            f"Duplicated {_BLOCK_MIN_LINES}+ line block found in {len(unique_files)} files: "
+                            f"{file_list}{suffix}"
+                        ),
+                        recommendation=(
+                            "Extract the repeated block into a shared function, template, or constant. "
+                            "If the files belong to the same package — add a `shared.py` or `utils.py` module there. "
+                            "If they span multiple packages — move the helper to the nearest common ancestor package."
+                        ),
+                        evidence=[
+                            EvidenceReference(kind="file", path=f, detail=f"line:{file_lines_map[f]}")
+                            for f in unique_files[:5]
+                        ],
+                        repair_kind=RepairKind.EXTRACT_SHARED.value,
+                        executor_action=f"Extract duplicated block from {unique_files[0]} et al. into shared helper; replace each occurrence with a call",
+                        proof_required="no repeated block; tests pass",
+                    )
                 )
-            )
         else:
-            # Intra-file duplication (same block repeated within one file)
+            # Intra-file duplication (same block repeated within one file).
             file_path = unique_files[0]
-            file_lines = sorted(set(ln for p, ln in locations if p == file_path))
+            file_lines = merged_per_file[file_path]
             if len(file_lines) >= 2:
                 _text_block_count += 1
                 findings.append(

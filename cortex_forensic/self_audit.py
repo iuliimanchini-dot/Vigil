@@ -49,6 +49,27 @@ _SELF_MATCH_PRONE_GATES = frozenset({
     "legacy_compat_debt.stale_migration_marker",
 })
 
+# Noisy, opt-in-only gates. These run ONLY when explicitly named in the gates
+# filter (run_forensic_audit(..., gates=[...]) / --gates). They are excluded
+# from a default full scan because they produce a high false-positive rate on
+# finished third-party code.
+#
+# god_object_zones infers "responsibility zones" from FUNCTION-NAME PREFIXES
+# against a fixed verb list (acquire/release/read/write/open/close/...). A
+# cohesive class whose natural method names happen to match several verbs (e.g.
+# a read/write lock) is wrongly flagged as a god object — ~0 true positives on
+# the filelock/click/mcp corpus. The capability is preserved (opt in via
+# gates=["god_object_zones"]); it is just not part of the default set. Re-enable
+# for your own repo by listing it in the `gates` argument or, project-wide, by
+# NOT listing it in `.cortex/disabled_gates.json` and passing it explicitly.
+#
+# The twin name-prefix heuristic that previously lived in
+# size_complexity.zone_overload was REMOVED outright (it double-reported the
+# same files as god_object_zones); the zone heuristic now has a single home here.
+_NOISY_OPT_IN_GATES: frozenset[str] = frozenset({
+    "god_object_zones",
+})
+
 _SELF_MATCH_PATH_PREFIX = "gate_checks/"
 
 
@@ -298,7 +319,33 @@ def _load_gate_profile_if_present(project_dir: Path) -> "Optional[Any]":
         if candidate_path.is_file():
             return _try_load(candidate_path)
 
+    # 3) Last resort: the package's OWN shipped gate_profile.json. Without this,
+    #    an external target (e.g. an arbitrary path with no ancestor profile)
+    #    silently fell back to the STRICT code-default thresholds (600/800/4)
+    #    instead of the shipped, documented defaults (750/1000/5). The shipped
+    #    profile is the effective default for every target. Located relative to
+    #    this module (repo root == parent of the cortex_forensic package).
+    packaged = _packaged_gate_profile_path()
+    if packaged is not None and packaged.is_file():
+        result = _try_load(packaged)
+        if result is not None:
+            return result
+
     return None
+
+
+def _packaged_gate_profile_path() -> "Optional[Path]":
+    """Return the path to the package's shipped ``gate_profile.json``.
+
+    The default profile ships at the repo root, one directory above the
+    ``cortex_forensic`` package (i.e. next to ``pyproject.toml``). Resolved
+    relative to this module so it works regardless of the caller's cwd or the
+    audit target location. Returns None if the file cannot be located.
+    """
+    here = Path(__file__).resolve()
+    # here == <repo>/cortex_forensic/self_audit.py → <repo>/gate_profile.json
+    candidate = here.parent.parent / "gate_profile.json"
+    return candidate if candidate.is_file() else None
 
 
 def build_synthetic_context(project_dir: Path, source_files: list[str]) -> PostExecGateContext:
@@ -376,6 +423,10 @@ def run_gates(
             continue
         if check_id not in _FILE_BASED_GATES:
             gates_skipped.append({"gate_id": check_id, "reason": "not_file_based"})
+            continue
+        # Noisy opt-in gates run ONLY when explicitly named in the gates filter.
+        if check_id in _NOISY_OPT_IN_GATES and not (gates_filter and check_id in gates_filter):
+            gates_skipped.append({"gate_id": check_id, "reason": "opt_in_only"})
             continue
         if gates_filter and check_id not in gates_filter:
             gates_skipped.append({"gate_id": check_id, "reason": "not_in_gates_filter"})
