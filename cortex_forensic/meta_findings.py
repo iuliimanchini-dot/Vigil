@@ -36,7 +36,7 @@ META_CHECK_SPECS: dict[str, dict[str, Any]] = {
         ),
     },
     "meta.git_unavailable": {
-        "severity": GateSeverity.MEDIUM,
+        "severity": GateSeverity.LOW,
         "impact": GateImpact.WARN,
         "title": "Git unavailable for --with-git audit",
         "recommendation": (
