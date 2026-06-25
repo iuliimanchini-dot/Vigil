@@ -11,12 +11,17 @@ dependencies = [
     "tree-sitter>=0.25,<0.26",
     "tree-sitter-language-pack>=1.10",
     "filelock>=3.12,<4",
+    "mcp>=1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4,<8",
 ]
+
+[project.scripts]
+cortex-map-mcp = "cortex_mcp.map_server:main"
+cortex-forensic-mcp = "cortex_mcp.forensic_server:main"
 
 [tool.setuptools]
 packages = [
@@ -27,4 +32,5 @@ packages = [
     "cortex_forensic.gate_checks.forensic_clusters",
     "cortex_forensic.gate_checks.forensic_cluster_runners",
     "cortex_forensic.gate_packs",
+    "cortex_mcp",
 ]
