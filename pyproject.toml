@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cortex-map-builder"
+version = "0.1.0"
+description = "Standalone structural map builder extracted from the Vigil/AI_Host_DOCR app"
+requires-python = ">=3.10"
+dependencies = [
+    "tree-sitter>=0.25,<0.26",
+    "tree-sitter-language-pack>=1.10",
+    "filelock>=3.12,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4,<8",
+]
+
+[tool.setuptools]
+packages = ["cortex_map_builder", "cortex_map_builder.source_adapters"]
