@@ -108,7 +108,7 @@ def capture_startup_trace(
 
     Args:
         target_module: Dotted Python module name to run (e.g. "json" or
-            "SYSTEM.runtime.app").
+            "mypackage.app").
         target_argv: Arguments forwarded to the target module's sys.argv.
         project_dir: If provided, prepended to subprocess PYTHONPATH so the
             target module can be imported.

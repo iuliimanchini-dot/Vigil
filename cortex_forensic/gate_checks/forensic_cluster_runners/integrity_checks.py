@@ -1,30 +1,19 @@
-"""Integrity cluster wrappers -- clusters 1-9.
+"""Integrity cluster wrappers -- universal (project-agnostic) clusters.
 
-Covers: declared capabilities, success proof, proxy-as-truth, config applied,
-rendered vs live, state divergence, fallback transparency, dead surfaces,
-phantom handlers.
+Covers: success proof, proxy-as-truth, config applied, state divergence,
+fallback transparency.
 """
 from __future__ import annotations
-
-import importlib
-import re
-from pathlib import Path
 
 from ...gate_models import GateFinding, PostExecGateContext
 from ..common import normalize_path
 from ..forensic_clusters import (
-    CapabilityDeclaration,
-    ProbeResult,
     ProofRequirement,
     assess_config_applied,
-    assess_declared_capabilities,
     assess_fallback_transparency,
-    assess_phantom_capability,
-    assess_rendered_vs_live,
     assess_source_truthfulness,
     assess_state_consistency,
     assess_success_proof,
-    assess_surface_reachability,
 )
 import logging
 _log = logging.getLogger(__name__)
@@ -151,82 +140,6 @@ def _check_fallback_transparency(ctx: PostExecGateContext) -> list[GateFinding]:
 
 
 # ---------------------------------------------------------------------------
-# Cluster 9: Phantom Capability
-# ---------------------------------------------------------------------------
-
-
-def _check_phantom_handlers(ctx: PostExecGateContext) -> list[GateFinding]:
-    """Cluster 9: Phantom Capability on critical operator handlers."""
-    critical_handlers = [
-        ("handle_export_analyze", "INTERFACE.operator.operator_api_infra", "handle_export_analyze", ["handler"]),
-        ("handle_switch_project", "INTERFACE.operator.operator_api_infra", "handle_switch_project", ["handler"]),
-    ]
-    findings: list[GateFinding] = []
-    for name, mod, attr, sig in critical_handlers:
-        findings.extend(assess_phantom_capability(name, mod, attr, expected_signature=sig))
-    return findings
-
-
-# ---------------------------------------------------------------------------
-# Cluster 1: Declared Capability != Actual Capability
-# ---------------------------------------------------------------------------
-
-
-def _check_declared_capabilities(ctx: PostExecGateContext) -> list[GateFinding]:
-    """Cluster 1: Verify declared operator handler capabilities actually exist."""
-    try:
-        mod = importlib.import_module("INTERFACE.operator.operator_api")
-    except ImportError:
-        from ..gate_checks.common import build_finding
-        from ...gate_models import (
-            EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind,
-        )
-        from ..common import build_finding as _bf
-        detail = "Cannot import operator_api -- unable to check declared capabilities"
-        return [_bf(
-            check_id="declared_vs_actual",
-            category=GateCategory.CONTRACT,
-            title="[declared_capability] import_failure",
-            severity=GateSeverity.HIGH,
-            impact=GateImpact.REVISE,
-            summary=detail,
-            recommendation="Fix the import error in operator_api.",
-            evidence=(EvidenceReference(kind="probe", detail=detail, ok=False),),
-            repair_kind=RepairKind.ADD_PROOF.value,
-            executor_action="Fix operator_api import error",
-        )]
-
-    all_names = getattr(mod, "__all__", None)
-    if not all_names:
-        return []
-
-    declarations = [
-        CapabilityDeclaration(name=name, declared_in="__all__", target=name)
-        for name in all_names
-        if name.startswith("handle_")
-    ]
-
-    def _probe(decl: CapabilityDeclaration) -> ProbeResult:
-        obj = getattr(mod, decl.target, None)
-        if obj is None:
-            return ProbeResult(
-                target=decl.target, applicable=True, evidence_found=True, ok=False,
-                detail="Declared in __all__ but does not exist on module",
-            )
-        if not callable(obj):
-            return ProbeResult(
-                target=decl.target, applicable=True, evidence_found=True, ok=False,
-                detail="Exists but is not callable",
-            )
-        return ProbeResult(
-            target=decl.target, applicable=True, evidence_found=True, ok=True,
-            detail="Exists and is callable",
-        )
-
-    return assess_declared_capabilities(declarations, _probe)
-
-
-# ---------------------------------------------------------------------------
 # Cluster 3: Proxy as Truth
 # ---------------------------------------------------------------------------
 
@@ -254,90 +167,6 @@ def _check_proxy_as_truth(ctx: PostExecGateContext) -> list[GateFinding]:
         )
     else:
         return []
-
-
-# ---------------------------------------------------------------------------
-# Cluster 5: Rendered Contract != Live Contract
-# ---------------------------------------------------------------------------
-
-
-def _check_rendered_vs_live(ctx: PostExecGateContext) -> list[GateFinding]:
-    """Cluster 5: Verify that route handlers referenced by dashboard dispatch exist."""
-    try:
-        ext_src = Path("INTERFACE/UI/dashboard_extension.py").read_text(encoding="utf-8")
-    except OSError:
-        return []
-
-    handler_refs = set(re.findall(r"operator_api\.(\w+)\(", ext_src))
-    if not handler_refs:
-        return []
-
-    # Let ImportError propagate -- _safe_run() in _helpers.py wraps each
-    # cluster runner and converts uncaught exceptions into a structured
-    # `internal_failure.cluster5_rendered_vs_live` GateFinding. Returning []
-    # here would silently mask "operator_api is unimportable" as "no findings"
-    # which is indistinguishable from "no handlers referenced" -- exactly the
-    # ambiguity the gate framework is meant to surface.
-    mod = importlib.import_module("INTERFACE.operator.operator_api")
-
-    def _probe(endpoint: str) -> ProbeResult:
-        obj = getattr(mod, endpoint, None)
-        if obj is None:
-            return ProbeResult(
-                target=endpoint, applicable=True, evidence_found=True, ok=False,
-                detail=f"Route dispatches to operator_api.{endpoint} but it does not exist",
-            )
-        if not callable(obj):
-            return ProbeResult(
-                target=endpoint, applicable=True, evidence_found=True, ok=False,
-                detail=f"operator_api.{endpoint} exists but is not callable",
-            )
-        return ProbeResult(
-            target=endpoint, applicable=True, evidence_found=True, ok=True,
-            detail=f"operator_api.{endpoint} exists and is callable",
-        )
-
-    return assess_rendered_vs_live(list(handler_refs), _probe)
-
-
-# ---------------------------------------------------------------------------
-# Cluster 8: Dead Surface Drift
-# ---------------------------------------------------------------------------
-
-
-def _check_dead_surfaces(ctx: PostExecGateContext) -> list[GateFinding]:
-    """Cluster 8: Verify that operator render functions are reachable via routes."""
-    try:
-        views_mod = importlib.import_module("INTERFACE.UI.views.operator_pages")
-        combined_src = ""
-        for f in [
-            "INTERFACE/operator/operator_api.py",
-            "INTERFACE/UI/dashboard_extension.py",
-            "INTERFACE/UI/views/operator_status.py",
-            "INTERFACE/UI/views/operator_pages.py",
-        ]:
-            p = Path(f)
-            if p.exists():
-                combined_src += p.read_text(encoding="utf-8")
-    except (ImportError, OSError):
-        return []
-
-    render_funcs = [
-        name for name in dir(views_mod)
-        if name.startswith("render_operator") and callable(getattr(views_mod, name))
-    ]
-
-    if not render_funcs:
-        return []
-
-    def _probe(surface: str) -> ProbeResult:
-        referenced = surface in combined_src
-        return ProbeResult(
-            target=surface, applicable=True, evidence_found=True, ok=referenced,
-            detail=f"{'Referenced' if referenced else 'ORPHANED'} in handler/dispatch code",
-        )
-
-    return assess_surface_reachability(render_funcs, _probe)
 
 
 # ---------------------------------------------------------------------------

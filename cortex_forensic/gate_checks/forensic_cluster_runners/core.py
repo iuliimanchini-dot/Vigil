@@ -17,15 +17,11 @@ from ._helpers import _safe_run
 from .integrity_checks import (
     _check_config_applied,
     _check_config_general,
-    _check_dead_surfaces,
     _check_fallback_transparency,
     _check_proxy_as_truth,
-    _check_rendered_vs_live,
     _check_state_divergence,
     _check_success_proof,
 )
-# _check_declared_capabilities + _check_phantom_handlers intentionally NOT imported:
-# they are Vigil-specific (hardcode INTERFACE.operator) and disabled in standalone.
 from .quality_checks import (
     _check_dead_code,
     _check_dependency_vulnerabilities,
@@ -81,16 +77,15 @@ _FORENSIC_CLUSTERS_TIMEOUT = 90
 def run_forensic_cluster_checks(ctx: PostExecGateContext) -> GateCheckResult:
     """Run universal forensic cluster checks against the real gate context.
 
-    11 clusters, 9 pipeline-integrated:
-    - C1: Declared != Actual (handler __all__ vs module)
+    Universal (project-agnostic) integrity clusters:
     - C2: Success Without Proof (artifact_refs check)
     - C3: Proxy as Truth (remote truth labeling)
     - C4: Config Accepted Ignored (proofs + transport + classification)
-    - C5: Rendered != Live (dispatch refs vs handler existence)
     - C6: State Divergence (reported vs observed files)
     - C7: Fallback Hides Truth (remote mode without proof)
-    - C8: Dead Surface (render functions reachability)
-    - C9: Phantom Capability (handler signature check)
+
+    (C1 declared/C5 rendered/C8 dead-surface/C9 phantom were Vigil-specific and
+    removed -- they depended on INTERFACE.operator / INTERFACE.UI modules.)
     """
     all_findings: List[GateFinding] = []
     error_notes: List[str] = []
@@ -106,15 +101,13 @@ def run_forensic_cluster_checks(ctx: PostExecGateContext) -> GateCheckResult:
             ("cluster4_config_accepted_ignored_proofs", lambda: _check_config_applied(ctx)),
             ("cluster6_state_divergence", lambda: _check_state_divergence(ctx)),
             ("cluster7_fallback_hides_truth", lambda: _check_fallback_transparency(ctx)),
-            # cluster9_phantom_capability + cluster1_declared_capability are DISABLED in
-            # standalone: they hardcode Vigil's INTERFACE.operator endpoints and emit a
-            # false HIGH finding (ImportError) on any non-Vigil project. Re-enable only
-            # inside the Vigil app where INTERFACE.operator.operator_api exists.
+            # clusters 1/5/8/9 (declared_capability, rendered_vs_live, dead_surface,
+            # phantom_capability) were REMOVED: they hardcoded Vigil's INTERFACE.operator
+            # / INTERFACE.UI modules and only ever produced false findings (ImportError /
+            # empty) on any non-Vigil project. Gone for a clean standalone package.
             # Phase 3 runners (new)
             ("cluster3_proxy_as_truth", lambda: _check_proxy_as_truth(ctx)),
             ("cluster4_config_accepted_ignored_general", lambda: _check_config_general(ctx)),
-            ("cluster5_rendered_vs_live", lambda: _check_rendered_vs_live(ctx)),
-            ("cluster8_dead_surface", lambda: _check_dead_surfaces(ctx)),
             # Phase 4 runners
             ("cluster10_edit_consistency", lambda: _check_edit_consistency(ctx)),
             ("cluster11_mutation_verified", lambda: _check_mutation_verified(ctx)),
