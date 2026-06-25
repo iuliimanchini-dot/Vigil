@@ -280,13 +280,7 @@ def build_pe_fp_entry_from_finding(
         "file": primary_path,
         "line": primary_line,
     }
-    code_hash = ""
-    if project_dir is not None and primary_path:
-        try:
-            from SYSTEM.shared_helpers.file_hash import compute_code_hash  # type: ignore[import]
-            code_hash = compute_code_hash(Path(project_dir) / primary_path)
-        except ImportError:
-            pass  # standalone mode — code_hash stamping unavailable
+    code_hash = ""  # standalone: code-hash stamping unavailable
     return FPAllowlistEntry(
         fingerprint=finding.fingerprint,
         reason=reason.strip(),

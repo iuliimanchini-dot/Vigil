@@ -1,7 +1,7 @@
 """Gate models for cortex_forensic.
 
-Re-exports shared vocabulary types from _shared (inlined from SYSTEM.shared_helpers.gate_models)
-and defines PostExecGateContext and related dataclasses (inlined from BRAIN.autoforensics.gate_models).
+Re-exports shared vocabulary types from _shared (inlined from the Vigil shared_helpers.gate_models)
+and defines PostExecGateContext and related dataclasses (inlined from the Vigil autoforensics.gate_models).
 
 This module provides backward-compatible re-exports so gate_checks can use:
     from cortex_forensic.gate_models import PostExecGateContext, ...

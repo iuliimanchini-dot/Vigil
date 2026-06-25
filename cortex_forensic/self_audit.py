@@ -1,7 +1,7 @@
 """Forensic Self-Audit — standalone static audit using autoforensics gates.
 
-Adapted from BRAIN.autoforensics.self_audit.
-All BRAIN/SYSTEM imports rewritten to cortex_forensic.* or _stubs.
+Adapted from the Vigil autoforensics self_audit.
+All cluster imports rewritten to cortex_forensic.* or _stubs.
 """
 from __future__ import annotations
 

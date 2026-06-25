@@ -1,8 +1,8 @@
 """Shared source analysis facade for cortex_forensic.
 
-Adapted from BRAIN.autoforensics.source_analysis.
+Adapted from the Vigil autoforensics source_analysis.
 Key change: uses cortex_map_builder.source_adapters (sibling standalone pkg)
-instead of BRAIN.autoforensics.map_builder.source_adapters.
+instead of the Vigil autoforensics map_builder.source_adapters.
 """
 from __future__ import annotations
 

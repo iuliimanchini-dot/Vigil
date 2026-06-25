@@ -1,6 +1,6 @@
 """Gate registry for cortex_forensic.
 
-Adapted from BRAIN.autoforensics.gate_registry.
+Adapted from the Vigil autoforensics gate_registry.
 """
 from __future__ import annotations
 

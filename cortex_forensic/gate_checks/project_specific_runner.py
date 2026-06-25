@@ -321,13 +321,8 @@ def _load_generation_status(project_dir: Path) -> dict[str, Any] | None:
                 _log.debug("gate status write failed for %s: %s", status_path, _exc)
 
         if data.get("status") == "running":
+            # standalone: claude run-lease unavailable
             lease = None
-            try:
-                from BRAIN.claude.claude_run_lease import read_claude_lease
-                lease = read_claude_lease(project_dir)
-            except Exception as _exc:
-                _log.debug("read_claude_lease failed during gate stale-detection: %s", _exc)
-                lease = None
             age = max(0.0, time.time() - float(data.get("updated_at") or 0.0))
             if lease is None and age > _STALE_GENERATION_SECONDS:
                 data["status"] = "failed"

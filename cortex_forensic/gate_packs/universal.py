@@ -1,8 +1,8 @@
 """Universal gate specifications for cortex_forensic.
 
-Adapted from BRAIN.autoforensics.gate_packs.universal.
+Adapted from the Vigil autoforensics gate_packs.universal.
 FOC gates (foc_observability_coverage, foc_secret_logging, foc_duplicate_log) are DROPPED.
-All BRAIN/SYSTEM imports rewritten to cortex_forensic.*.
+All cluster imports rewritten to cortex_forensic.*.
 """
 from __future__ import annotations
 

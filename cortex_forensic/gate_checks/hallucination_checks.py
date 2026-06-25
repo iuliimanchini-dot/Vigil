@@ -26,11 +26,9 @@ from cortex_forensic._shared import (
     GateImpact,
     GateSeverity,
 )
-try:
-    from SYSTEM.shared_helpers.python_module_index import PythonModuleIndex, ResolveOutcome  # type: ignore[import]
-except ImportError:
-    PythonModuleIndex = None  # type: ignore[assignment,misc]
-    ResolveOutcome = None  # type: ignore[assignment,misc]
+# standalone: code-hash stamping unavailable
+PythonModuleIndex = None  # type: ignore[assignment,misc]
+ResolveOutcome = None  # type: ignore[assignment,misc]
 from cortex_forensic.gate_models import PostExecGateContext
 from cortex_forensic.gate_checks.common import build_check_result, build_finding, iter_touched_snapshots
 from cortex_forensic.source_analysis import is_source_file

@@ -1,7 +1,7 @@
 """Defensive meta-integrity findings collector for cortex_forensic.
 
-Adapted from BRAIN.autoforensics.meta_findings.
-All SYSTEM.shared_helpers.gate_models imports rewritten to cortex_forensic._shared.
+Adapted from the Vigil autoforensics meta_findings.
+All cluster gate_models imports rewritten to cortex_forensic._shared.
 """
 from __future__ import annotations
 

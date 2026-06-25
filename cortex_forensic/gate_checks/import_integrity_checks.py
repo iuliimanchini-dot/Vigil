@@ -71,7 +71,7 @@ def run_import_integrity_checks(ctx: PostExecGateContext):
             for deleted_path, module_dotpath in module_paths:
                 if rel_importer == deleted_path:
                     continue  # Don't flag the deleted file itself
-                # Check for: from SYSTEM.runtime.foo import ... OR import SYSTEM.runtime.foo
+                # Check for cluster-style import patterns matching module_dotpath
                 if f"from {module_dotpath}" in text or f"import {module_dotpath}" in text:
                     findings.append(
                         build_finding(

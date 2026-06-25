@@ -279,7 +279,7 @@ SOURCE_EXTENSIONS: frozenset[str] = frozenset({
 
 
 # ---------------------------------------------------------------------------
-# gate_models (vocabulary types)  — copied from SYSTEM.shared_helpers.gate_models
+# gate_models (vocabulary types)  — copied from the Vigil shared_helpers.gate_models
 # ---------------------------------------------------------------------------
 
 class GateVerdict(str, Enum):

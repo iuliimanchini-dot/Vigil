@@ -244,10 +244,8 @@ def _filter_expired_or_drifted(
     TTL still applies.
     """
     import time as _time_mod
-    try:
-        from SYSTEM.shared_helpers.file_hash import compute_code_hash  # type: ignore[import]
-    except ImportError:
-        compute_code_hash = None  # type: ignore[assignment]
+    # standalone: code-hash stamping unavailable
+    compute_code_hash = None  # type: ignore[assignment]
 
     now = float(_time_mod.time())
     kept: list[AllowlistEntry] = []

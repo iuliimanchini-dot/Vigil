@@ -1,8 +1,8 @@
-"""Minimal stubs for SYSTEM control-plane types imported eagerly by self_audit.py.
+"""Minimal stubs for control-plane types used by self_audit.py.
 
-self_audit.py lines 44-45 import at module level:
-    from SYSTEM.control_plane.models import ValidationContractProfile
-    from SYSTEM.runtime.pocketcoder_adapter import PocketCoderForensicReport
+self_audit.py imports the control-plane ValidationContractProfile type and
+the PocketCoderForensicReport type at module level. In the standalone package
+those cluster modules do not exist, so this file provides drop-in stubs.
 
 These are used ONLY to construct empty stub instances via .from_mapping({})
 inside build_synthetic_context(). The full Vigil implementations have many
