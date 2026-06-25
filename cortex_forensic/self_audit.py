@@ -211,17 +211,36 @@ def _load_gate_profile_if_present(project_dir: Path) -> "Optional[Any]":
             profile_path=str(path),
         )
 
+    import json as _json
+
+    def _try_load(path: Path) -> "Optional[RepoGateProfile]":
+        if not path.is_file():
+            return None
+        try:
+            payload = _json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            _log.warning("gate_profile load failed (%s): %s", path, exc)
+            return None
+        return _profile_from_dict(payload, path)
+
     root = Path(project_dir).resolve()
+
+    # 1) Prefer a profile co-located with the audit target (existing behavior).
     for candidate in _PROFILE_CANDIDATES:
-        path = root / candidate
-        if path.is_file():
-            try:
-                import json as _json
-                payload = _json.loads(path.read_text(encoding="utf-8"))
-                return _profile_from_dict(payload, path)
-            except Exception as exc:
-                _log.warning("gate_profile load failed (%s): %s", path, exc)
-                return None
+        result = _try_load(root / candidate)
+        if result is not None:
+            return result
+
+    # 2) Fallback: walk up to find a shipped default `gate_profile.json` in an
+    #    ancestor directory (e.g. the repo root) when the audit target is a
+    #    sub-package or an external path. Config discovery by ancestor-walk is
+    #    the same pattern linters/git use; the target-local profile always wins.
+    #    A malformed ancestor file is logged-and-skipped, never raised.
+    for ancestor in root.parents:
+        candidate_path = ancestor / "gate_profile.json"
+        if candidate_path.is_file():
+            return _try_load(candidate_path)
+
     return None
 
 

@@ -162,6 +162,73 @@ The default delivery mode for both servers is **poll** (the client calls `get_*_
 
 ---
 
+## Default gate profile (size-noise control)
+
+The forensic auditor reads size/complexity thresholds from a **gate profile**. A
+default profile ships at the repo root: [`gate_profile.json`](gate_profile.json).
+Its only job is to cut **size-noise false-positives** — file-length,
+function-length, and nesting-depth warnings firing on legitimately large code —
+*without* hiding genuinely extreme outliers (a 2 000-line god-file still
+surfaces).
+
+### Where the profile is discovered
+
+`cortex_forensic.self_audit._load_gate_profile_if_present` looks, in order:
+
+1. `<audit-target>/gate_profile.json`
+2. `<audit-target>/.cortex/gate_profile.json`
+3. **ancestor walk** — the first `gate_profile.json` found in any parent
+   directory of the audit target (so a sub-package audit such as
+   `run_forensic_audit("cortex_forensic")` still picks up the repo-root default).
+
+A target-local profile always wins over an ancestor one. A missing or malformed
+profile is logged and skipped — never fatal. `.cortex/` is git-ignored, so the
+**committed** default lives at the repo root.
+
+### How to set your own
+
+Copy the shipped file to your project root and edit `size_thresholds`:
+
+```bash
+cp gate_profile.json /path/to/your-project/gate_profile.json
+# then edit size_thresholds to taste
+```
+
+### Thresholds and their cited sources
+
+JSON forbids comments, so the justification for every value is here. Each value
+is a **published linter default**, not an arbitrary constant. `warn` =
+MEDIUM-severity heads-up (advisory); `revise` = HIGH-severity "refactor now".
+
+| Key | Value | Source / rationale |
+|-----|-------|--------------------|
+| `function_warn` | **100** | SonarQube `S138` and PMD `ExcessiveMethodLength` both default to **100** lines. (Clean Code's ~20–60 is an ideal, not a linter default — too aggressive for a real engine, would re-introduce noise.) |
+| `function_revise` | **150** | 1.5× the SonarQube/PMD limit — a "clearly excessive" function that should be split. Isolates true outliers (e.g. 325- and 290-line functions in this repo). |
+| `nesting_warn` | **5** | pylint `max-nested-blocks` **default = 5**. Nesting depth is the structural-complexity signal the engine actually measures; deep nesting is the same code smell McCabe's cyclomatic-complexity ≈10 guideline targets, expressed as a nesting bound. (SonarQube `S134`=3 is stricter; pylint's 5 is the widely-shipped default and avoids flagging ordinary depth-4 control flow.) |
+| `nesting_revise` | **8** | Beyond any common linter's tolerance — genuinely tangled control flow worth flattening. |
+| `file_warn` | **750** | SonarQube file-size flag default = **750** lines. |
+| `file_revise` | **1000** | pylint `max-module-lines` **default = 1000**. A file past 1 000 lines is a god-file candidate. |
+
+> **Note on cyclomatic complexity.** The size/complexity engine measures file
+> LOC, function LOC, and **nesting depth** — it does not compute a McCabe
+> cyclomatic-complexity number, and the profile has no `cyclomatic` key (one
+> would be dead config). Nesting depth is used as the structural-complexity
+> proxy, calibrated to pylint's `max-nested-blocks` default; the McCabe ≈10
+> guideline informs that choice rather than being read directly.
+
+### Effect (measured before → after on this repo)
+
+| Audit target | total before | total after | `size.*` before | `size.*` after |
+|--------------|-------------:|------------:|----------------:|---------------:|
+| `cortex_forensic/`   | 125 | 86 | 92 | 55 |
+| `cortex_map_builder/`| 115 | 93 | 49 | 37 |
+
+The remaining `size.*` findings are functions over 100 lines and nesting deeper
+than 5 — code that genuinely exceeds the published limits, which is the intended
+behavior, not a miss.
+
+---
+
 ## Running tests
 
 ```bash

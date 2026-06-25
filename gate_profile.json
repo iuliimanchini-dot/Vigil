@@ -1,0 +1,31 @@
+{
+  "profile_name": "cortex-default",
+  "version": "1.0",
+  "_doc": "Default forensic gate profile. Size/complexity thresholds use industry-standard linter defaults to silence size-noise false-positives on legitimately large files. JSON forbids comments; the cited justification for every value lives in README.md ('Default gate profile' section). To override for your own repo, copy this file to <your-project>/gate_profile.json (or <your-project>/.cortex/gate_profile.json) and edit size_thresholds.",
+  "size_thresholds": {
+    "file_warn": 750,
+    "file_revise": 1000,
+    "function_warn": 100,
+    "function_revise": 150,
+    "nesting_warn": 5,
+    "nesting_revise": 8
+  },
+  "generated_roots": [
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "dist",
+    "build",
+    "node_modules",
+    "venv",
+    ".venv",
+    ".cortex"
+  ],
+  "vendored_roots": [
+    ".vendor",
+    "vendor",
+    "node_modules"
+  ]
+}
