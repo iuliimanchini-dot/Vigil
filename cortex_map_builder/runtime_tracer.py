@@ -81,7 +81,7 @@ def _build_argv(
     argv = [
         sys.executable,
         "-m",
-        "BRAIN.autoforensics.map_builder.runtime_tracer_entry",
+        "cortex_map_builder.runtime_tracer_entry",
         "--target", target_module,
         "--out", temp_path,
         "--timeout-s", str(timeout_s),

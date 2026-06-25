@@ -550,7 +550,7 @@ def cmd_map_build(args: argparse.Namespace) -> int:
                 file=_progress_file,
             )
         else:
-            _producer = "BRAIN.autoforensics.map_builder.%s_builder" % map_name
+            _producer = "cortex_map_builder.%s_builder" % map_name
             _extra_kwargs = _authority_conflict_build_meta_kwargs(map_name, _files_by_lang)
             _bm = _build_build_meta(
                 map_name,

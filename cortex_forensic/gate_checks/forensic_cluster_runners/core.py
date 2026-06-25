@@ -18,14 +18,14 @@ from .integrity_checks import (
     _check_config_applied,
     _check_config_general,
     _check_dead_surfaces,
-    _check_declared_capabilities,
     _check_fallback_transparency,
-    _check_phantom_handlers,
     _check_proxy_as_truth,
     _check_rendered_vs_live,
     _check_state_divergence,
     _check_success_proof,
 )
+# _check_declared_capabilities + _check_phantom_handlers intentionally NOT imported:
+# they are Vigil-specific (hardcode INTERFACE.operator) and disabled in standalone.
 from .quality_checks import (
     _check_dead_code,
     _check_dependency_vulnerabilities,
@@ -106,9 +106,11 @@ def run_forensic_cluster_checks(ctx: PostExecGateContext) -> GateCheckResult:
             ("cluster4_config_accepted_ignored_proofs", lambda: _check_config_applied(ctx)),
             ("cluster6_state_divergence", lambda: _check_state_divergence(ctx)),
             ("cluster7_fallback_hides_truth", lambda: _check_fallback_transparency(ctx)),
-            ("cluster9_phantom_capability", lambda: _check_phantom_handlers(ctx)),
+            # cluster9_phantom_capability + cluster1_declared_capability are DISABLED in
+            # standalone: they hardcode Vigil's INTERFACE.operator endpoints and emit a
+            # false HIGH finding (ImportError) on any non-Vigil project. Re-enable only
+            # inside the Vigil app where INTERFACE.operator.operator_api exists.
             # Phase 3 runners (new)
-            ("cluster1_declared_capability", lambda: _check_declared_capabilities(ctx)),
             ("cluster3_proxy_as_truth", lambda: _check_proxy_as_truth(ctx)),
             ("cluster4_config_accepted_ignored_general", lambda: _check_config_general(ctx)),
             ("cluster5_rendered_vs_live", lambda: _check_rendered_vs_live(ctx)),

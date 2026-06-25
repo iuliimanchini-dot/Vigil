@@ -53,7 +53,7 @@ def build_all_maps(project_dir: Path) -> None:
     """
     raise NotImplementedError(
         "build_all_maps is not implemented yet. "
-        "Use 'python -m SYSTEM.runtime.app map-build' after Phase 7."
+        "Use run_map_build(project_dir) or the cortex-map-mcp server instead."
     )
 
 

@@ -46,7 +46,7 @@ class BuildMeta:
     reason: str          # human-readable; empty string if status="ok"
     confidence_avg: float
     coverage: dict       # {"files_scanned_by_lang": {...}, "files_supported_by_lang": {...}, "coverage_ratio": float}
-    producer: str        # "BRAIN.autoforensics.map_builder.<module>"
+    producer: str        # "cortex_map_builder.<module>"
     built_at: str        # ISO8601 UTC Z-suffix
     duration_s: float
     # Phase 5.2: representative sample of files with no coverage for this map.
@@ -90,7 +90,7 @@ class BuildMeta:
                 "files_supported_by_lang": {},
                 "coverage_ratio": 0.0,
             })),
-            producer=str(d.get("producer", "BRAIN.autoforensics.map_builder.unknown")),
+            producer=str(d.get("producer", "cortex_map_builder.unknown")),
             built_at=str(d.get("built_at", "")),
             # Accept both "build_duration_s" (canonical) and legacy "duration_s".
             duration_s=float(

@@ -2,7 +2,7 @@
 
 CRITICAL: This file must NEVER be imported by the parent process or any
 other module. It is designed to run only as a __main__ subprocess via:
-    python -m BRAIN.autoforensics.map_builder.runtime_tracer_entry
+    python -m cortex_map_builder.runtime_tracer_entry
 
 It installs sys.settrace and a __import__ hook, runs the target module,
 captures all call events and import events, and writes a JSON file to

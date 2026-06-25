@@ -290,7 +290,7 @@ def write_map(
 
     payload: dict[str, Any] = {
         "schema_version": "1.0.0",
-        "produced_by": "BRAIN.autoforensics.map_builder.v1",
+        "produced_by": "cortex_map_builder.v1",
     }
     payload.update(metadata)
     payload["entries"] = entries
@@ -432,7 +432,7 @@ def regenerate_index(
 
     index_payload: dict[str, Any] = {
         "schema_version": "1.0.0",
-        "produced_by": "BRAIN.autoforensics.map_builder.v1",
+        "produced_by": "cortex_map_builder.v1",
         "built_at": built_at,
         "pipeline_success": errors_count == 0,
         "maps": maps_section,
