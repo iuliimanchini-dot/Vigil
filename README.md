@@ -262,6 +262,95 @@ behavior, not a miss.
 
 ---
 
+## Real-world metrics
+
+Measured on **real third-party Python packages** copied out of this repo's
+`.venv` (sans `__pycache__`), audited with the shipped default `gate_profile.json`
+active (`file_warn 750 / file_revise 1000 / nesting_warn 5`). Reproduce with
+[`tests/benchmark_realworld.py`](tests/benchmark_realworld.py)
+(`python tests/benchmark_realworld.py` — single-threaded, KB-scale targets, light).
+
+Hardware: Windows 11, CPython 3.11, `workers=1` (forensic enforces this
+internally). "mem" = peak RSS delta over the call, sampled at 20 ms in a
+background thread. "tokens" = MCP summary-view chars ÷ 4.
+
+| Target | `.py` files | LOC | forensic time | forensic peak RSS | map(`all`) time | map peak RSS |
+|--------|------------:|----:|--------------:|------------------:|----------------:|-------------:|
+| `filelock` | 14  | 3 385  | 1.6 s  | 8.1 MB | 0.5 s | 4.1 MB |
+| `click`    | 17  | 12 179 | 3.7 s  | 2.3 MB | 0.9 s | 2.8 MB |
+| `mcp`      | 110 | 20 824 | 10.8 s | 6.2 MB | 1.4 s | 3.5 MB |
+
+Forensic time is roughly linear in file count (~0.1 s/file here); the map build
+is much cheaper. Memory stays low (single-digit MB peak delta) — these tools are
+light enough to run inline.
+
+### MCP output stays in budget
+
+The summary views (`forensic_server._build_forensic_summary`,
+`map_server._build_map_summary`) are what an agent actually receives. Both stay
+well under the ~6 k-token budget on every target:
+
+| Target | forensic summary | map summary |
+|--------|-----------------:|------------:|
+| `filelock` | ~3.0 k tok (11.9 KB) | ~0.5 k tok (1.9 KB) |
+| `click`    | ~1.5 k tok (6.1 KB)  | ~0.4 k tok (1.7 KB) |
+| `mcp`      | ~1.7 k tok (6.7 KB)  | ~0.6 k tok (2.2 KB) |
+
+(`filelock`'s summary is the largest because its findings are dominated by one
+duplication cluster, so the per-`check_id` breakdown is wide. Still < 3 k tokens.)
+
+### Determinism
+
+`run_forensic_audit` was run **twice** on each target and the sorted
+`(check_id, file, line)` finding set was **identical** every time (filelock
+32 ≡ 32, click 54 ≡ 54, mcp 110 ≡ 110). No ordering or count drift.
+
+### Honest false-positive assessment
+
+The point of this section is to be straight about signal quality on **clean,
+idiomatic, well-maintained** third-party code — where a sane profile should find
+*little*. `filelock` (32 findings, all 32 inspected against the cited
+`file:line`) is the representative target:
+
+| `check_id` | n | Verdict | Why |
+|------------|--:|---------|-----|
+| `duplication.text_block` | 15 | **noise (true but not actionable)** | Verbatim **docstrings** (`:param:` lines) and identical keyword-only parameter lists shared between the sync (`_api.py`) and async (`asyncio.py`) lock twins. The text genuinely repeats, but (a) you cannot/should-not dedupe shared docstrings, and (b) **one** duplicated block emits ~12 separate findings (per-line inflation). |
+| `god_object_zones.zone_inflation` | 7 | **false positive** | "Zones" are function-name prefixes from a fixed verb list (`acquire/release/read/write/open/close/parse/validate/run`). A lock library's natural method names. `_read_write.py` / `_soft_rw/_sync.py` are single cohesive read-write-lock classes flagged as multi-responsibility "god objects" purely by domain-vocabulary collision. |
+| `size_complexity.zone_overload` | 5 | **false positive (duplicate mechanism)** | Same zone-prefix logic, lower threshold — re-flags files `god_object_zones` already flagged. |
+| `broad_except.base_exception` | 2 | **false positive** | `_api.py:513`, `asyncio.py:268` are `except BaseException: <decrement counter>; raise` — the textbook correct cancel-cleanup idiom. It re-raises; it does **not** swallow. The "prevents clean shutdown" claim is wrong. |
+| `broad_except.hidden_sentinel.bare_or_base` | 2 | **false positive** | Same two re-raising sites; "silently discards the error" is false (bare `raise` on the next line). |
+| `size.file_warn` | 1 | **true, actionable** | `_soft_rw/_sync.py` is 858 lines > 750. A real, factual signal. |
+
+**FP rate (strict): 16/32 ≈ 50 %** are outright false (`god_object` + `zone_overload`
++ both `broad_except` sub-checks). Counting the docstring-duplication cluster as
+non-actionable noise as well, **only 1 of 32 findings (~3 %) is genuinely
+actionable**. The noisiest gate is the **zone family** (`god_object_zones` +
+`size_complexity.zone_overload` = 12/32): it infers "responsibility zones" from
+function-name prefixes, so any library whose domain verbs overlap the keyword set
+(locks, I/O, parsers, schedulers) trips it on perfectly cohesive classes.
+
+A second structural FP shows up on `click`/`mcp`:
+`api.public_function_signature_change` (7 on click, 10 on mcp) runs in **degraded
+mode** when there is no git "before" snapshot (always the case on a fresh
+checkout) and falls back to a docstring-param-count-vs-signature heuristic. It
+fires on every documented **variadic** API — e.g. `click.decorators.option(*param_decls, cls=None, **attrs)`
+is reported as "signature possibly narrowed: 0 params vs 3 documented," which is
+simply false. Expect this check to misfire on any `*args/**kwargs` factory.
+
+**Verdict: on clean third-party code this profile is noisy, not a tight signal.**
+The size/threshold gates (`size.*`) are honest and useful — they report real,
+factual breaches of published limits. The *structural-inference* gates
+(`god_object_zones`, `size_complexity.zone_overload`, and `api.public_function_signature_change`
+in degraded/no-git mode) are the noise source and account for the bulk of the
+false positives. For third-party or vendored code, disable the zone family and
+the signature-drift check via `.cortex/disabled_gates.json`
+(`["god_object_zones", "size_complexity", "api"]`) — then the remaining output is
+mostly trustworthy. The tools are **fast, light, and deterministic**; the
+*default gate selection* is tuned for a team auditing its own diffs, not for
+low-FP scanning of finished libraries.
+
+---
+
 ## Per-project configurability
 
 Three knobs let a project tune the forensic auditor without forking it:
