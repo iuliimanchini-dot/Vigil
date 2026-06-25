@@ -191,7 +191,11 @@ def start_code_map(path: str = "", map: str = "all") -> dict:
     else:
         resolved_path = _paths._resolve_project_root(None)
 
-    started = _jobs.start(_run_map_build_with_path, resolved_path, map=map)
+    # project_dir enables disk-backed persistence so results survive a server
+    # restart; get_code_map_status/results then resolve by job_id from disk.
+    started = _jobs.start(
+        _run_map_build_with_path, resolved_path, map=map, project_dir=resolved_path
+    )
     started["resolved_path"] = resolved_path
     return started
 

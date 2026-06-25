@@ -156,6 +156,39 @@ The same three-step pattern applies to `forensic-audit`: `start_forensic_audit` 
 
 ---
 
+## Job persistence (results survive a restart)
+
+Completed job results are **disk-backed**, so a finished audit or map build is
+still retrievable after the MCP server process restarts.
+
+- **Where files live.** Each job is persisted under its own project root at
+  `<project_dir>/.cortex/cortex_jobs/<job_id>.json` (the `project_dir` is the
+  resolved path the `start_*` tool targeted). A small global index keyed by
+  `job_id` lives under the user state dir (`~/.cortex/cortex_jobs_index/`) so a
+  restarted server — which polls by `job_id` only — can locate the owning
+  project. Persistence engages only when a `project_dir` is known; an in-memory
+  job started without one keeps the legacy behaviour (lost on exit).
+- **Atomic mechanism.** Records are written via `tempfile.mkstemp` + `os.replace`
+  under a per-job `filelock.FileLock` — the same atomic pattern as
+  `cortex_map_builder.map_storage`. `os.replace` is atomic on POSIX and Windows,
+  so a reader never observes a half-written file. The terminal record is written
+  to disk **before** the in-memory status flips to terminal, so disk is never
+  behind what `get_*_status` reports.
+- **Restart / interrupted semantics.** Terminal records (`done` / `error` /
+  `cancelled` / `timeout`) reload verbatim. A record left in the `running` state
+  means the process died mid-flight; since the worker thread is gone and cannot
+  be resumed, it reloads as **`interrupted`** — never as `done`.
+- **Cross-project rule.** A job's file lives only under its own project. Polling
+  by `job_id` resolves through the global index; polling *scoped to a specific
+  project* only reads that project's directory, so a job that ran under project
+  X is **not** visible when resolved scoped to project Y.
+- **Bounded reads.** Disk lookups are by `job_id` (one index read + one record
+  read) — never a directory scan. Records carry the full result payload; there
+  is currently **no automatic cleanup** of `.cortex/cortex_jobs/` (large results
+  accumulate there until removed), so treat it like the `.cortex/maps/` cache.
+
+---
+
 ## MCP push note
 
 The default delivery mode for both servers is **poll** (the client calls `get_*_status` / `get_*_results` repeatedly). Claude Code does support server-to-client push notifications via `claude/channel` + `--channels`, but these servers do not use that mechanism — poll was chosen for simplicity and portability. If you need push-style delivery you can add it via the FastMCP channel API; it is not impossible, just not wired here.

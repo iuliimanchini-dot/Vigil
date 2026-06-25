@@ -239,7 +239,9 @@ def start_forensic_audit(
             all_languages=all_languages,
         )
 
-    started = _jobs.start(_run)
+    # project_dir enables disk-backed persistence so results survive a server
+    # restart; get_forensic_status/results then resolve by job_id from disk.
+    started = _jobs.start(_run, project_dir=resolved_path)
     started["resolved_path"] = resolved_path
     return started
 
