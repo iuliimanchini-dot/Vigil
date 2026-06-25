@@ -1,4 +1,4 @@
-﻿"""Stuck feature flag forensic gate.
+"""Stuck feature flag forensic gate.
 
 Detects module-level UPPER_SNAKE_CASE constants assigned to ``False`` that:
     1. are referenced inside an ``if`` test somewhere in the touched files,

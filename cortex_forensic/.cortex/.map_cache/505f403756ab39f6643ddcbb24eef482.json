@@ -1,0 +1,26 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "505f403756ab39f6643ddcbb24eef482",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "505f403756ab39f6643ddcbb24eef482",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "cortex_forensic.gate_packs.universal",
+      "cortex_forensic.gate_packs.universal.GATE_SPECS",
+      "cortex_forensic._shared",
+      "cortex_forensic._shared.GateCategory",
+      "logging"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 22,
+    "symbols_defined": [
+      "_u_entry"
+    ],
+    "write_calls": []
+  }
+}

@@ -1,4 +1,4 @@
-﻿"""Allowlist writer — programmatic Python API to append FP entries.
+"""Allowlist writer — programmatic Python API to append FP entries.
 
 Sprint D1 (2026-04-23). Previously only the executor could write
 `false_positive_allowlist.json` via file tool calls. This module adds a

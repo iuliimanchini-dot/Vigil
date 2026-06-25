@@ -1,4 +1,4 @@
-﻿"""Contract shape drift forensic gate (Finding 6.4).
+"""Contract shape drift forensic gate (Finding 6.4).
 
 contract_shape_drift: detect dataclass field additions and removals between
 HEAD~1 and the working tree.  Field rename is structurally undetectable (it

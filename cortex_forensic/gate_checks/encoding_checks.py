@@ -1,4 +1,4 @@
-﻿"""Detect non-ASCII characters that crash Windows console (cp1252).
+"""Detect non-ASCII characters that crash Windows console (cp1252).
 
 Windows default console encoding cannot render emoji, box-drawing, arrows,
 smart quotes. Python print/raise/log crashes with UnicodeEncodeError.

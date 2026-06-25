@@ -1,0 +1,30 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "fff8083a5569c8515f7c0028d4200314",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "fff8083a5569c8515f7c0028d4200314",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      ".core",
+      ".edit_mutation",
+      ".dead_code",
+      ".code_style",
+      ".allowlist",
+      ".api_protocol",
+      ".exception_boundary",
+      ".static_analysis",
+      ".async_quality",
+      ".data_quality",
+      ".legacy_debt"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 205,
+    "symbols_defined": [],
+    "write_calls": []
+  }
+}

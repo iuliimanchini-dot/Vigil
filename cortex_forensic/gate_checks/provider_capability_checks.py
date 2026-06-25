@@ -1,4 +1,4 @@
-﻿"""Provider capability gate check.
+"""Provider capability gate check.
 
 Detects executor provider capability mismatches before gate-monitored runs.
 Registered in gate_registry.py before tool_hook_coverage_checks.

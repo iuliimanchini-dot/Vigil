@@ -1,0 +1,33 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "c13c66eb7fba32c537d3500abd71e6c3",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "c13c66eb7fba32c537d3500abd71e6c3",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      ".core",
+      "...gate_models",
+      "..common",
+      "logging",
+      "re",
+      "json"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 638,
+    "symbols_defined": [
+      "assess_naive_timezone",
+      "assess_near_duplicate_code",
+      "assess_missing_null_check",
+      "assess_path_concatenation",
+      "assess_log_without_context",
+      "assess_test_secrets",
+      "assess_unpinned_dependencies"
+    ],
+    "write_calls": []
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "build_duration_s": 0.0,
+  "build_meta": {
+    "analysis_mode": "python_ast",
+    "build_duration_s": 0.0,
+    "built_at": "2026-06-25T08:30:34.156254Z",
+    "confidence_avg": 1.0,
+    "coverage": {
+      "coverage_ratio": 0.0,
+      "files_scanned_by_lang": {
+        "python": 79
+      },
+      "files_supported_by_lang": {},
+      "supported_languages": []
+    },
+    "producer": "BRAIN.autoforensics.map_builder.refactor_boundary_builder",
+    "reason": "",
+    "status": "ok",
+    "unsupported_files_sample": []
+  },
+  "built_at": "2026-06-25T08:30:34.156254Z",
+  "entries": [],
+  "map_name": "refactor_boundary",
+  "produced_by": "BRAIN.autoforensics.map_builder.v1",
+  "schema_version": "1.0.0"
+}

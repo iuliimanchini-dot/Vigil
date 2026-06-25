@@ -1,0 +1,37 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "1355ddc9a1547ae5e53451760d57844a",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "1355ddc9a1547ae5e53451760d57844a",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "re",
+      "pathlib",
+      "pathlib.Path",
+      "...gate_models",
+      "..common",
+      ".._ast_helpers",
+      "logging",
+      "ast"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 499,
+    "symbols_defined": [
+      "_is_sanctioned_hub",
+      "_has_noqa_legacy_compat",
+      "_count_reexport_lines",
+      "_count_substantial_functions",
+      "check_forwarding_wrapper",
+      "_module_is_pure_reexport_shim",
+      "check_unused_shim_module",
+      "check_stale_migration_marker",
+      "check_shape_adapter_without_producer"
+    ],
+    "write_calls": []
+  }
+}

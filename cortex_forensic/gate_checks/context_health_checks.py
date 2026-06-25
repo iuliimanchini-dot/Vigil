@@ -1,4 +1,4 @@
-﻿"""Context health gate (B3 wave, 2026-04-23).
+"""Context health gate (B3 wave, 2026-04-23).
 
 The autoforensics system previously had a silent failure mode: when the
 ``PostExecGateContext`` was assembled with empty fields (e.g. ``file_snapshots

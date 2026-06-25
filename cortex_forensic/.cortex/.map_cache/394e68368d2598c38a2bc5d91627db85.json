@@ -1,0 +1,39 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "394e68368d2598c38a2bc5d91627db85",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "394e68368d2598c38a2bc5d91627db85",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "dataclasses",
+      "dataclasses.dataclass",
+      "typing",
+      "typing.Optional",
+      ".core",
+      "...gate_models",
+      "..common",
+      "logging",
+      "ast",
+      "re"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 405,
+    "symbols_defined": [
+      "DeadCodeItem",
+      "assess_dead_code",
+      "classify_dead_code_item",
+      "_collect_type_checking_import_line_nums",
+      "_collect_forward_ref_strings",
+      "assess_unused_imports",
+      "_extract_from_annotation",
+      "_is_cast_call",
+      "_is_isinstance_call"
+    ],
+    "write_calls": []
+  }
+}

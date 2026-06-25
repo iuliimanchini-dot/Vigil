@@ -1,4 +1,4 @@
-﻿"""Context-fallback fail-open detector (Finding G.3 plan v7 + F7 enhancement).
+"""Context-fallback fail-open detector (Finding G.3 plan v7 + F7 enhancement).
 
 Two detection criteria (each emits a distinct ``check_id`` subtype):
 

@@ -1,0 +1,16 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "4af2dc96fc13776320a9fa818dfe9e33",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "4af2dc96fc13776320a9fa818dfe9e33",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [],
+    "is_parseable": false,
+    "side_effects": [],
+    "size_lines": 283,
+    "symbols_defined": [],
+    "write_calls": []
+  }
+}

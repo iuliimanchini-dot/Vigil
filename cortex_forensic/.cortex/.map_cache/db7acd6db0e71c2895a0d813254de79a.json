@@ -1,0 +1,46 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "db7acd6db0e71c2895a0d813254de79a",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "db7acd6db0e71c2895a0d813254de79a",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "dataclasses",
+      "dataclasses.dataclass",
+      "pathlib",
+      "pathlib.Path",
+      "typing",
+      "typing.Optional",
+      ".core",
+      "...gate_models",
+      "..common",
+      ".._ast_helpers",
+      "logging",
+      "re",
+      "ast"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 786,
+    "symbols_defined": [
+      "assess_secrets_in_code",
+      "_collect_constant_assignment_lines",
+      "_collect_docstring_ranges_for_magic",
+      "_has_documented_count_marker",
+      "assess_magic_numbers",
+      "assess_error_message_quality",
+      "assess_naming_consistency",
+      "assess_todo_debt",
+      "assess_log_level_quality",
+      "assess_encoding_consistency",
+      "_is_const_name",
+      "_is_pure_literal_rhs",
+      "_in_docstring"
+    ],
+    "write_calls": []
+  }
+}

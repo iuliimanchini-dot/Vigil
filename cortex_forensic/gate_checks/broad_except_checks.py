@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import ast
 import re
 
 from cortex_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
@@ -33,14 +34,93 @@ _BASE_EXCEPTION_RE = re.compile(
     re.MULTILINE,
 )
 
-# ---------------------------------------------------------------------------
-# Pattern: except <anything>: \n    ... \n    return None/{}  (sentinel return)
-# The body may have one intermediate line before the return statement.
-# ---------------------------------------------------------------------------
-_EXCEPT_RETURN_SENTINEL_RE = re.compile(
-    r'except\s+\w[^:]*:\s*\n(\s+).*\n\1return\s+(None|\{\}|\[\])(?=\s|$)',
-    re.MULTILINE,
-)
+# _EXCEPT_RETURN_SENTINEL_RE was removed (fix 3): the regex matched ANY exception
+# type including narrow ones (OSError, ValueError) causing false positives.
+# Replaced by AST-based _check_broad_return_sentinel below.
+
+_BROAD_EXCEPTION_NAMES: frozenset[str] = frozenset({"Exception", "BaseException"})
+_SENTINEL_CONSTS: frozenset[object] = frozenset({None})
+
+
+def _is_broad_handler(handler: ast.ExceptHandler) -> bool:
+    """Return True for bare except: or except Exception/BaseException: — mirrors _is_narrow_catch."""
+    if handler.type is None:
+        return True
+    if isinstance(handler.type, ast.Name) and handler.type.id in _BROAD_EXCEPTION_NAMES:
+        return True
+    if isinstance(handler.type, ast.Tuple):
+        for elt in handler.type.elts:
+            if isinstance(elt, ast.Name) and elt.id in _BROAD_EXCEPTION_NAMES:
+                return True
+    return False
+
+
+def _handler_returns_sentinel(handler: ast.ExceptHandler) -> tuple[bool, str]:
+    """Return (True, sentinel_str) if handler body contains a return of None/{}/[].
+
+    Checks ALL return statements in the body (not just the last line), so this
+    catches both single-line and multi-line handler bodies.
+    """
+    _SENTINEL_STRS = {"None": "None", "{}": "{}", "[]": "[]"}
+    for node in ast.walk(ast.Module(body=handler.body, type_ignores=[])):
+        if isinstance(node, ast.Return):
+            val = node.value
+            if val is None:
+                return True, "None"
+            if isinstance(val, ast.Constant) and val.value is None:
+                return True, "None"
+            if isinstance(val, ast.Dict) and not val.keys:
+                return True, "{}"
+            if isinstance(val, ast.List) and not val.elts:
+                return True, "[]"
+    return False, ""
+
+
+def _check_broad_return_sentinel(text: str, snapshot_path: str, findings: list) -> None:
+    """AST-based replacement for the old _EXCEPT_RETURN_SENTINEL_RE check.
+
+    Only flags broad catches (bare except / except Exception / except BaseException)
+    that return a sentinel (None, {}, []). Narrow types (OSError, ValueError, etc.)
+    are explicitly excluded — they represent intentional, type-scoped fallbacks.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Try,)):
+            continue
+        for handler in getattr(node, "handlers", []):
+            if not _is_broad_handler(handler):
+                continue
+            is_sentinel, sentinel_str = _handler_returns_sentinel(handler)
+            if not is_sentinel:
+                continue
+            line_no = getattr(handler, "lineno", 0) or 0
+            findings.append(
+                build_finding(
+                    check_id="broad_except.return_none",
+                    category=GateCategory.FALLBACK,
+                    title=f"Silent sentinel return '{sentinel_str}' after broad except in {snapshot_path}:{line_no}",
+                    severity=GateSeverity.MEDIUM,
+                    impact=GateImpact.REVISE,
+                    summary=(
+                        f"File {snapshot_path} line {line_no} catches an exception and returns a "
+                        f"sentinel value ({sentinel_str}). The caller cannot distinguish success from "
+                        "failure — errors are silently swallowed."
+                    ),
+                    recommendation=(
+                        "Narrow the exception to specific types (e.g. OSError, ValueError) "
+                        "and surface the error via logging or re-raise. "
+                        "Never silently drop exceptions that cross a function boundary."
+                    ),
+                    evidence=[EvidenceReference(kind="file", path=snapshot_path, detail=f"line:{line_no}")],
+                    repair_kind=RepairKind.REMOVE_FALLBACK.value,
+                    executor_action="Narrow exception to specific type",
+                    proof_required="No broad except in file",
+                    allowlist_allowed=False,
+                )
+            )
 
 # ---------------------------------------------------------------------------
 # Pattern: except <anything>: \n    log.warning(...) \n    pass  (log-then-swallow)
@@ -156,26 +236,8 @@ def run_broad_except_checks(ctx: PostExecGateContext):
                 allowlist_allowed=False,
             )
 
-        # --- broad_except.return_none: except ...: return None/{}/[] ---
-        for match in _EXCEPT_RETURN_SENTINEL_RE.finditer(text):
-            line_no = text[:match.start()].count("\n") + 1
-            sentinel = match.group(2)
-            _emit(
-                findings,
-                check_id="broad_except.return_none",
-                snapshot_path=normalized,
-                line_no=line_no,
-                title=f"Silent sentinel return '{sentinel}' after broad except in {normalized}:{line_no}",
-                summary=(
-                    f"File {normalized} line {line_no} catches an exception and returns a "
-                    f"sentinel value ({sentinel}). The caller cannot distinguish success from "
-                    "failure — errors are silently swallowed."
-                ),
-                repair_kind=RepairKind.REMOVE_FALLBACK.value,
-                executor_action="Narrow exception to specific type",
-                proof_required="No broad except in file",
-                allowlist_allowed=False,
-            )
+        # --- broad_except.return_none: AST-based check (only broad catches) ---
+        _check_broad_return_sentinel(text, normalized, findings)
 
         # --- broad_except.log_swallow: except ...: log.X(...); pass ---
         for match in _EXCEPT_LOG_SWALLOW_RE.finditer(text):

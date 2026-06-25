@@ -1,4 +1,4 @@
-﻿"""Atomic-write safety detector (Finding G.2 plan v7; FP reduction F.9b, F.10, F.16a).
+"""Atomic-write safety detector (Finding G.2 plan v7; FP reduction F.9b, F.10, F.16a).
 
 Detects write_text / write_bytes / open(..., "w"|"wb"|"a"|"ab") calls in a
 function body that lack a surrounding tmpfile+rename atomic pattern.

@@ -1,4 +1,4 @@
-﻿"""Config safety gate: dangerous_default, missing_env_var_check, hardcoded_path.
+"""Config safety gate: dangerous_default, missing_env_var_check, hardcoded_path.
 
 config.dangerous_default:
   Dataclass field or function parameter default with a security-risky value:

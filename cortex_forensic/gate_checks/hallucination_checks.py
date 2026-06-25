@@ -1,4 +1,4 @@
-﻿"""Gate check: detect AI-hallucinated symbols in modified Python files.
+"""Gate check: detect AI-hallucinated symbols in modified Python files.
 
 Two sub-checks:
   A. hallucination.import_not_found  -- imported name doesn't exist in the source module

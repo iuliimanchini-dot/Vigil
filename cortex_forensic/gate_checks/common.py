@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import ast
 import hashlib
@@ -168,7 +168,7 @@ def read_snapshot(project_dir: Path, path: str) -> GateFileSnapshot:
     abs_path = project_dir / repo_path
     if not abs_path.exists() or not abs_path.is_file():
         return GateFileSnapshot(path=repo_path, exists=False, size=0, line_count=0, text="")
-    text = abs_path.read_text(encoding="utf-8", errors="replace")
+    text = abs_path.read_text(encoding="utf-8-sig", errors="replace")
     return GateFileSnapshot(
         path=repo_path,
         exists=True,

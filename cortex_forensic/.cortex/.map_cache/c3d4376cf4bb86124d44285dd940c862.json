@@ -1,0 +1,27 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "c3d4376cf4bb86124d44285dd940c862",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "c3d4376cf4bb86124d44285dd940c862",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "dataclasses",
+      "dataclasses.dataclass",
+      "dataclasses.field",
+      "logging"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 219,
+    "symbols_defined": [
+      "LanguageProfile",
+      "get_profile_for_extension",
+      "get_profile_for_lang"
+    ],
+    "write_calls": []
+  }
+}

@@ -1,4 +1,4 @@
-﻿"""Reliability gate: blocking_call_missing_timeout (consolidated F-3).
+"""Reliability gate: blocking_call_missing_timeout (consolidated F-3).
 
 Detects blocking I/O calls that lack a ``timeout=`` keyword (or, for
 ``socket.connect``, an explicit ``settimeout()`` on the same variable).

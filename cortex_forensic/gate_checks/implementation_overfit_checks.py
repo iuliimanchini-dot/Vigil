@@ -1,4 +1,4 @@
-﻿"""Gate: implementation_overfit
+"""Gate: implementation_overfit
 
 Detects code overfit to local context: hardcoded paths, project-specific
 strings, and broken project-agnosticism claims.

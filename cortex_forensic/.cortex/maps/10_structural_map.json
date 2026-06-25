@@ -1,0 +1,2516 @@
+{
+  "build_duration_s": 0.05,
+  "build_meta": {
+    "analysis_mode": "python_ast",
+    "build_duration_s": 0.05,
+    "built_at": "2026-06-25T08:30:33.433950Z",
+    "confidence_avg": 1.0,
+    "coverage": {
+      "coverage_ratio": 1.0,
+      "files_scanned_by_lang": {
+        "python": 79
+      },
+      "files_supported_by_lang": {
+        "go": 0,
+        "java": 0,
+        "javascript": 0,
+        "python": 79,
+        "typescript": 0
+      },
+      "supported_languages": [
+        "go",
+        "java",
+        "javascript",
+        "python",
+        "typescript"
+      ]
+    },
+    "producer": "BRAIN.autoforensics.map_builder.structural_builder",
+    "reason": "",
+    "status": "ok",
+    "unsupported_files_sample": []
+  },
+  "built_at": "2026-06-25T08:30:33.433950Z",
+  "entries": [
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "__init__.py"
+      ],
+      "file": "__init__.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "pathlib",
+        "pathlib.Path",
+        "typing",
+        "typing.Any",
+        "typing.Optional",
+        "traceback",
+        "cortex_forensic.self_audit",
+        "cortex_forensic.self_audit.discover_source_files",
+        "cortex_forensic.self_audit.build_synthetic_context",
+        "cortex_forensic.self_audit.run_gates",
+        "cortex_forensic.self_audit.build_json_report",
+        "cortex_forensic.self_audit.filter_findings_by_severity",
+        "cortex_forensic.self_audit._probe_meta_integrity",
+        "cortex_forensic.self_audit.GateOutcome",
+        "cortex_forensic.meta_findings",
+        "cortex_forensic.meta_findings.drain_meta_findings"
+      ],
+      "language": "python",
+      "size_lines": 180,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "run_forensic_audit"
+      ],
+      "symbols_used_external": [],
+      "tags": [
+        "high_fan_out"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "_git_utils.py"
+      ],
+      "file": "_git_utils.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "logging",
+        "subprocess",
+        "pathlib",
+        "pathlib.Path"
+      ],
+      "language": "python",
+      "size_lines": 178,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "git_show",
+        "git_log_numstat",
+        "git_has_repo",
+        "git_head_sha"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "_shared.py"
+      ],
+      "file": "_shared.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "collections.abc",
+        "collections.abc.Mapping",
+        "typing",
+        "typing.Any",
+        "contextlib",
+        "hashlib",
+        "json",
+        "logging",
+        "os",
+        "re",
+        "sys",
+        "time",
+        "threading",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "dataclasses.field",
+        "enum",
+        "enum.Enum",
+        "pathlib",
+        "pathlib.Path",
+        "typing.Generator",
+        "typing.Optional",
+        "msvcrt",
+        "fcntl"
+      ],
+      "language": "python",
+      "size_lines": 510,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "coerce_int",
+        "coerce_float",
+        "coerce_str",
+        "coerce_str_tuple",
+        "coerce_dict",
+        "collect_extras",
+        "acquire_file_lock",
+        "truncate_preview",
+        "hash_payload",
+        "safe_command",
+        "safe_path",
+        "safe_url",
+        "safe_error",
+        "redact_dict",
+        "_scrub_value",
+        "is_executor_metadata_path",
+        "GateVerdict",
+        "RepairKind",
+        "GateSeverity",
+        "GateImpact",
+        "GateCategory",
+        "EvidenceReference",
+        "GateFinding",
+        "GateCheckResult",
+        "GateFileSnapshot",
+        "RepoGateProfile",
+        "_starts_with_any",
+        "to_dict",
+        "__post_init__",
+        "to_dict",
+        "to_dict",
+        "to_dict",
+        "is_generated_or_vendored",
+        "is_critical",
+        "is_performance_sensitive",
+        "to_dict"
+      ],
+      "symbols_used_external": [],
+      "tags": [
+        "high_fan_out"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "_stubs.py"
+      ],
+      "file": "_stubs.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "dataclasses.field",
+        "typing",
+        "typing.Any",
+        "typing.Mapping"
+      ],
+      "language": "python",
+      "size_lines": 156,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "ValidationContractProfile",
+        "PocketCoderForensicReport",
+        "from_mapping",
+        "to_dict",
+        "from_mapping",
+        "to_dict",
+        "_str",
+        "_bool",
+        "_str_tuple",
+        "_str",
+        "_float",
+        "_int",
+        "_str_tuple"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/__init__.py"
+      ],
+      "file": "gate_checks/__init__.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations"
+      ],
+      "language": "python",
+      "size_lines": 1,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/_ast_helpers.py"
+      ],
+      "file": "gate_checks/_ast_helpers.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/quality_checks.py",
+        "gate_checks/forensic_clusters/async_quality.py",
+        "gate_checks/forensic_clusters/code_style.py",
+        "gate_checks/forensic_clusters/edit_mutation.py",
+        "gate_checks/forensic_clusters/legacy_debt.py",
+        "gate_checks/forensic_clusters/static_analysis.py"
+      ],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 551,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/_deployment_detector.py"
+      ],
+      "file": "gate_checks/_deployment_detector.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "ast",
+        "json",
+        "logging",
+        "os",
+        "re",
+        "sys",
+        "pathlib",
+        "pathlib.Path",
+        "typing",
+        "typing.Literal",
+        "tomllib"
+      ],
+      "language": "python",
+      "size_lines": 574,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_normalize_explicit",
+        "get_explicit_deployment",
+        "detect_file_deployment",
+        "_path_in_ignored_tree",
+        "_read_pyproject_classifiers",
+        "_read_setuppy_classifiers",
+        "_classify_from_classifiers",
+        "_has_dockerfile",
+        "_gha_runners",
+        "_windows_scripts_outside_dev",
+        "_linux_only_deps_in_requirements",
+        "_detect_project_uncached",
+        "detect_project_deployment",
+        "clear_project_cache",
+        "resolve_deployment"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/atomic_write_checks.py"
+      ],
+      "file": "gate_checks/atomic_write_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 1143,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/authority_checks.py"
+      ],
+      "file": "gate_checks/authority_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 96,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/boundary_breach_checks.py"
+      ],
+      "file": "gate_checks/boundary_breach_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 202,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/broad_except_checks.py"
+      ],
+      "file": "gate_checks/broad_except_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 200,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/broad_except_hidden_sentinel_checks.py"
+      ],
+      "file": "gate_checks/broad_except_hidden_sentinel_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 346,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/common.py"
+      ],
+      "file": "gate_checks/common.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/_helpers.py",
+        "gate_checks/forensic_cluster_runners/core.py",
+        "gate_checks/forensic_cluster_runners/integrity_checks.py",
+        "gate_checks/forensic_clusters/api_protocol.py",
+        "gate_checks/forensic_clusters/async_quality.py",
+        "gate_checks/forensic_clusters/code_style.py",
+        "gate_checks/forensic_clusters/core.py",
+        "gate_checks/forensic_clusters/data_quality.py",
+        "gate_checks/forensic_clusters/dead_code.py",
+        "gate_checks/forensic_clusters/edit_mutation.py",
+        "gate_checks/forensic_clusters/exception_boundary.py",
+        "gate_checks/forensic_clusters/legacy_debt.py",
+        "gate_checks/forensic_clusters/static_analysis.py",
+        "gate_checks/forensic_clusters/structural_quality.py"
+      ],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 253,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "high_fan_in",
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/config_safety_checks.py"
+      ],
+      "file": "gate_checks/config_safety_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 704,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/config_ssot_checks.py"
+      ],
+      "file": "gate_checks/config_ssot_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 78,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/conflict_checks.py"
+      ],
+      "file": "gate_checks/conflict_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 193,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/context_fallback_checks.py"
+      ],
+      "file": "gate_checks/context_fallback_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 699,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/context_health_checks.py"
+      ],
+      "file": "gate_checks/context_health_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 290,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/contract_shape_drift_checks.py"
+      ],
+      "file": "gate_checks/contract_shape_drift_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 485,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/dirty_baseline_check.py"
+      ],
+      "file": "gate_checks/dirty_baseline_check.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "fnmatch",
+        "json",
+        "logging",
+        "subprocess",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "dataclasses.field",
+        "pathlib",
+        "pathlib.Path",
+        "typing",
+        "typing.Any",
+        "typing.Iterable"
+      ],
+      "language": "python",
+      "size_lines": 274,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "DirtyBaselineVerdict",
+        "_load_policy",
+        "_is_whitelisted",
+        "_parse_porcelain",
+        "check_dirty_baseline",
+        "to_dict"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/duplication_checks.py"
+      ],
+      "file": "gate_checks/duplication_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 278,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/embedded_string_checks.py"
+      ],
+      "file": "gate_checks/embedded_string_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 123,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/empty_output_checks.py"
+      ],
+      "file": "gate_checks/empty_output_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 88,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/encoding_checks.py"
+      ],
+      "file": "gate_checks/encoding_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 847,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/export_completeness_checks.py"
+      ],
+      "file": "gate_checks/export_completeness_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 157,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/fallback_checks.py"
+      ],
+      "file": "gate_checks/fallback_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 41,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/file_proliferation_checks.py"
+      ],
+      "file": "gate_checks/file_proliferation_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 171,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/fix_without_test_checks.py"
+      ],
+      "file": "gate_checks/fix_without_test_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 69,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_cluster_runners/__init__.py"
+      ],
+      "file": "gate_checks/forensic_cluster_runners/__init__.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        ".core",
+        ".quality_checks"
+      ],
+      "language": "python",
+      "size_lines": 9,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_cluster_runners/_helpers.py"
+      ],
+      "file": "gate_checks/forensic_cluster_runners/_helpers.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/advanced_checks.py",
+        "gate_checks/forensic_cluster_runners/core.py",
+        "gate_checks/forensic_cluster_runners/quality_checks.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "logging",
+        "typing",
+        "typing.List",
+        "...gate_models",
+        "..common"
+      ],
+      "language": "python",
+      "size_lines": 71,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_safe_run"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_cluster_runners/advanced_checks.py"
+      ],
+      "file": "gate_checks/forensic_cluster_runners/advanced_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/core.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "...source_analysis",
+        "...gate_models",
+        "..forensic_clusters",
+        "._helpers",
+        "logging",
+        "...gate_checks.forensic_clusters.legacy_debt",
+        "...gate_checks.forensic_clusters.structural_quality"
+      ],
+      "language": "python",
+      "size_lines": 315,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_check_hardcoded_paths",
+        "_check_boundary_validation",
+        "_check_unreachable_code",
+        "_check_shadowed_builtins",
+        "_check_mutable_defaults",
+        "_check_resource_leaks",
+        "_check_docstring_params",
+        "_check_broad_catch_no_reraise",
+        "_check_debug_prints",
+        "_check_commented_code",
+        "_check_missing_await",
+        "_check_unchecked_response",
+        "_check_naive_timezone",
+        "_check_near_duplicate_code",
+        "_check_missing_null_check",
+        "_check_path_concatenation",
+        "_check_log_without_context",
+        "_check_test_secrets",
+        "_check_unpinned_dependencies",
+        "_check_legacy_compat_debt",
+        "_check_shared_logic_fragmentation"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_cluster_runners/core.py"
+      ],
+      "file": "gate_checks/forensic_cluster_runners/core.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "concurrent.futures",
+        "logging",
+        "time",
+        "typing",
+        "typing.List",
+        "...gate_models",
+        "..common",
+        "._helpers",
+        ".integrity_checks",
+        ".quality_checks",
+        ".advanced_checks",
+        "..forensic_clusters"
+      ],
+      "language": "python",
+      "size_lines": 221,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "run_forensic_cluster_checks",
+        "_run_all_checks"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_cluster_runners/integrity_checks.py"
+      ],
+      "file": "gate_checks/forensic_cluster_runners/integrity_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/core.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "importlib",
+        "re",
+        "pathlib",
+        "pathlib.Path",
+        "...gate_models",
+        "..common",
+        "..forensic_clusters",
+        "logging",
+        "..gate_checks.common"
+      ],
+      "language": "python",
+      "size_lines": 374,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_check_success_proof",
+        "_proof_is_consumed",
+        "_check_config_applied",
+        "_check_state_divergence",
+        "_check_fallback_transparency",
+        "_check_phantom_handlers",
+        "_check_declared_capabilities",
+        "_check_proxy_as_truth",
+        "_check_rendered_vs_live",
+        "_check_dead_surfaces",
+        "_check_config_general",
+        "_probe",
+        "_probe",
+        "_probe"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_cluster_runners/quality_checks.py"
+      ],
+      "file": "gate_checks/forensic_cluster_runners/quality_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/__init__.py",
+        "gate_checks/forensic_cluster_runners/core.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "os",
+        "re",
+        "...source_analysis",
+        "...gate_models",
+        ".._ast_helpers",
+        "..forensic_clusters",
+        "._helpers",
+        "logging",
+        "hashlib",
+        "subprocess",
+        "pathlib",
+        "pathlib.Path"
+      ],
+      "language": "python",
+      "size_lines": 660,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_check_edit_consistency",
+        "_check_mutation_verified",
+        "_check_security_patterns",
+        "_check_test_quality",
+        "_check_import_cycles",
+        "_check_roundtrip_consistency",
+        "_check_shared_mutable_state",
+        "_check_dependency_vulnerabilities",
+        "_check_secrets_in_code",
+        "_check_dead_code",
+        "_check_unused_imports",
+        "_check_magic_numbers",
+        "_check_error_message_quality",
+        "_check_naming_consistency",
+        "_check_todo_debt",
+        "_check_log_level_quality",
+        "_check_encoding_consistency",
+        "_check_embedded_code_syntax",
+        "_check_response_shape_drift",
+        "_check_http_method_consistency",
+        "_extract_js_fetches_multiline",
+        "_collect_balanced_block",
+        "_check_js_surface_coverage",
+        "_check_exception_swallowing"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "file": "gate_checks/forensic_clusters/__init__.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/advanced_checks.py",
+        "gate_checks/forensic_cluster_runners/core.py",
+        "gate_checks/forensic_cluster_runners/integrity_checks.py",
+        "gate_checks/forensic_cluster_runners/quality_checks.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        ".core",
+        ".edit_mutation",
+        ".dead_code",
+        ".code_style",
+        ".allowlist",
+        ".api_protocol",
+        ".exception_boundary",
+        ".static_analysis",
+        ".async_quality",
+        ".data_quality",
+        ".legacy_debt"
+      ],
+      "language": "python",
+      "size_lines": 205,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/allowlist.py"
+      ],
+      "file": "gate_checks/forensic_clusters/allowlist.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 426,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/allowlist_writer.py"
+      ],
+      "file": "gate_checks/forensic_clusters/allowlist_writer.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 302,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/api_protocol.py"
+      ],
+      "file": "gate_checks/forensic_clusters/api_protocol.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        ".core",
+        "...gate_models",
+        "..common",
+        "logging",
+        "re"
+      ],
+      "language": "python",
+      "size_lines": 231,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "assess_embedded_code_syntax",
+        "assess_response_shape_drift",
+        "assess_http_method_consistency",
+        "assess_js_surface_coverage"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/async_quality.py"
+      ],
+      "file": "gate_checks/forensic_clusters/async_quality.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        ".core",
+        ".exception_boundary",
+        "...gate_models",
+        "..common",
+        ".._ast_helpers",
+        "logging",
+        "re",
+        "ast"
+      ],
+      "language": "python",
+      "size_lines": 979,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "assess_broad_catch_no_reraise",
+        "assess_debug_prints",
+        "_collect_docstring_line_ranges",
+        "assess_commented_code",
+        "_build_missing_await_findings_ast",
+        "assess_missing_await",
+        "assess_unchecked_response",
+        "_line_in_docstring",
+        "_has_audit_trail_marker_above",
+        "_arg_callee_name",
+        "_is_async_runner_call",
+        "_decorator_marks_async",
+        "_in_type_checking",
+        "_get_enclosing_func",
+        "_is_directly_awaited",
+        "_is_asyncio_run_call",
+        "_callee_name",
+        "_line_has_marker"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/code_style.py"
+      ],
+      "file": "gate_checks/forensic_clusters/code_style.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "pathlib",
+        "pathlib.Path",
+        "typing",
+        "typing.Optional",
+        ".core",
+        "...gate_models",
+        "..common",
+        ".._ast_helpers",
+        "logging",
+        "re",
+        "ast"
+      ],
+      "language": "python",
+      "size_lines": 786,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "assess_secrets_in_code",
+        "_collect_constant_assignment_lines",
+        "_collect_docstring_ranges_for_magic",
+        "_has_documented_count_marker",
+        "assess_magic_numbers",
+        "assess_error_message_quality",
+        "assess_naming_consistency",
+        "assess_todo_debt",
+        "assess_log_level_quality",
+        "assess_encoding_consistency",
+        "_is_const_name",
+        "_is_pure_literal_rhs",
+        "_in_docstring"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/core.py"
+      ],
+      "file": "gate_checks/forensic_clusters/core.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py",
+        "gate_checks/forensic_clusters/api_protocol.py",
+        "gate_checks/forensic_clusters/async_quality.py",
+        "gate_checks/forensic_clusters/code_style.py",
+        "gate_checks/forensic_clusters/data_quality.py",
+        "gate_checks/forensic_clusters/dead_code.py",
+        "gate_checks/forensic_clusters/edit_mutation.py",
+        "gate_checks/forensic_clusters/exception_boundary.py",
+        "gate_checks/forensic_clusters/static_analysis.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "inspect",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "dataclasses.field",
+        "typing",
+        "typing.Callable",
+        "typing.Optional",
+        "typing.Sequence",
+        "...gate_models",
+        "..common",
+        "logging",
+        "importlib"
+      ],
+      "language": "python",
+      "size_lines": 566,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "detect_language",
+        "_insufficient_evidence_finding",
+        "CapabilityDeclaration",
+        "assess_declared_capabilities",
+        "ProofRequirement",
+        "assess_success_proof",
+        "assess_source_truthfulness",
+        "assess_config_applied",
+        "assess_rendered_vs_live",
+        "assess_state_consistency",
+        "assess_fallback_transparency",
+        "assess_surface_reachability",
+        "assess_phantom_capability",
+        "ProbeResult"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/data_quality.py"
+      ],
+      "file": "gate_checks/forensic_clusters/data_quality.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        ".core",
+        "...gate_models",
+        "..common",
+        "logging",
+        "re",
+        "json"
+      ],
+      "language": "python",
+      "size_lines": 638,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "assess_naive_timezone",
+        "assess_near_duplicate_code",
+        "assess_missing_null_check",
+        "assess_path_concatenation",
+        "assess_log_without_context",
+        "assess_test_secrets",
+        "assess_unpinned_dependencies"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/dead_code.py"
+      ],
+      "file": "gate_checks/forensic_clusters/dead_code.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "typing",
+        "typing.Optional",
+        ".core",
+        "...gate_models",
+        "..common",
+        "logging",
+        "ast",
+        "re"
+      ],
+      "language": "python",
+      "size_lines": 405,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "DeadCodeItem",
+        "assess_dead_code",
+        "classify_dead_code_item",
+        "_collect_type_checking_import_line_nums",
+        "_collect_forward_ref_strings",
+        "assess_unused_imports",
+        "_extract_from_annotation",
+        "_is_cast_call",
+        "_is_isinstance_call"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/edit_mutation.py"
+      ],
+      "file": "gate_checks/forensic_clusters/edit_mutation.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "ast",
+        "hashlib",
+        "pathlib",
+        "pathlib.Path",
+        "typing",
+        "typing.Optional",
+        "typing.Sequence",
+        ".core",
+        "...gate_models",
+        "..common",
+        ".._ast_helpers",
+        "logging",
+        "re",
+        "json"
+      ],
+      "language": "python",
+      "size_lines": 800,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "assess_edit_consistency",
+        "assess_mutation_verified",
+        "_py_fstring_template",
+        "_py_fstring_is_sql",
+        "_py_format_call_is_sql",
+        "_py_pct_format_is_sql",
+        "_detect_python_sql_injection",
+        "_call_attr_chain",
+        "_detect_python_dangerous_calls",
+        "_detect_python_shell_true",
+        "assess_security_patterns",
+        "assess_test_quality",
+        "assess_import_cycles",
+        "assess_roundtrip_consistency",
+        "assess_shared_mutable_state",
+        "assess_dependency_vulnerabilities",
+        "_dfs"
+      ],
+      "symbols_used_external": [],
+      "tags": [
+        "high_fan_out"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/exception_boundary.py"
+      ],
+      "file": "gate_checks/forensic_clusters/exception_boundary.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py",
+        "gate_checks/forensic_clusters/async_quality.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        ".core",
+        "...gate_models",
+        "..common",
+        "logging",
+        "re"
+      ],
+      "language": "python",
+      "size_lines": 225,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_extract_except_body",
+        "_is_swallowed",
+        "assess_exception_swallowing",
+        "assess_hardcoded_paths",
+        "assess_boundary_validation"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/legacy_debt.py"
+      ],
+      "file": "gate_checks/forensic_clusters/legacy_debt.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/advanced_checks.py",
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "re",
+        "pathlib",
+        "pathlib.Path",
+        "...gate_models",
+        "..common",
+        ".._ast_helpers",
+        "logging",
+        "ast"
+      ],
+      "language": "python",
+      "size_lines": 499,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_is_sanctioned_hub",
+        "_has_noqa_legacy_compat",
+        "_count_reexport_lines",
+        "_count_substantial_functions",
+        "check_forwarding_wrapper",
+        "_module_is_pure_reexport_shim",
+        "check_unused_shim_module",
+        "check_stale_migration_marker",
+        "check_shape_adapter_without_producer"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/static_analysis.py"
+      ],
+      "file": "gate_checks/forensic_clusters/static_analysis.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_clusters/__init__.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        ".core",
+        "...gate_models",
+        "..common",
+        ".._ast_helpers",
+        "logging",
+        "ast",
+        "re"
+      ],
+      "language": "python",
+      "size_lines": 732,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "assess_unreachable_code",
+        "_ast_shadowed_builtins_python",
+        "assess_shadowed_builtins",
+        "assess_mutable_defaults",
+        "assess_resource_leaks",
+        "assess_docstring_params",
+        "_indent",
+        "_noqa"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/forensic_clusters/structural_quality.py"
+      ],
+      "file": "gate_checks/forensic_clusters/structural_quality.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/advanced_checks.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "os",
+        "re",
+        "pathlib",
+        "pathlib.Path",
+        "typing",
+        "typing.Iterable",
+        "...gate_models",
+        "..common",
+        "logging",
+        "...source_analysis"
+      ],
+      "language": "python",
+      "size_lines": 299,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_stem",
+        "_parent_dir",
+        "_has_import_from",
+        "_flow_markers_found",
+        "assess_shared_logic_fragmentation",
+        "_pattern1_abstraction_bypass",
+        "_pattern2_provider_parallel_flow",
+        "_pattern3_responsibility_proliferation",
+        "_pattern4_generic_shared_fork"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/god_object_zones_checks.py"
+      ],
+      "file": "gate_checks/god_object_zones_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 173,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/hallucination_checks.py"
+      ],
+      "file": "gate_checks/hallucination_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 566,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/hunter_artifact_completeness_check.py"
+      ],
+      "file": "gate_checks/hunter_artifact_completeness_check.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 140,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/implementation_overfit_checks.py"
+      ],
+      "file": "gate_checks/implementation_overfit_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 380,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/import_integrity_checks.py"
+      ],
+      "file": "gate_checks/import_integrity_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 234,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/imports_in_function_checks.py"
+      ],
+      "file": "gate_checks/imports_in_function_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 283,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/performance_checks.py"
+      ],
+      "file": "gate_checks/performance_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 106,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/project_specific_runner.py"
+      ],
+      "file": "gate_checks/project_specific_runner.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 691,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/provider_capability_checks.py"
+      ],
+      "file": "gate_checks/provider_capability_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 73,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/refactor_completeness_checks.py"
+      ],
+      "file": "gate_checks/refactor_completeness_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 274,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/reliability_checks.py"
+      ],
+      "file": "gate_checks/reliability_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 390,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/reporting_checks.py"
+      ],
+      "file": "gate_checks/reporting_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 55,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/runtime_behavior_checks.py"
+      ],
+      "file": "gate_checks/runtime_behavior_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 221,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/security_injection_checks.py"
+      ],
+      "file": "gate_checks/security_injection_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 332,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/semantic_intent_checks.py"
+      ],
+      "file": "gate_checks/semantic_intent_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 139,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/size_complexity_checks.py"
+      ],
+      "file": "gate_checks/size_complexity_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 372,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/stuck_feature_flag_checks.py"
+      ],
+      "file": "gate_checks/stuck_feature_flag_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 354,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/syntax_validity_checks.py"
+      ],
+      "file": "gate_checks/syntax_validity_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 217,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/temporal_freshness_checks.py"
+      ],
+      "file": "gate_checks/temporal_freshness_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 79,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/test_quality_checks.py"
+      ],
+      "file": "gate_checks/test_quality_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 948,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/testing_checks.py"
+      ],
+      "file": "gate_checks/testing_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 149,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/toctou_checks.py"
+      ],
+      "file": "gate_checks/toctou_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 369,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_checks/type_checking_checks.py"
+      ],
+      "file": "gate_checks/type_checking_checks.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 316,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "unparseable"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_models.py"
+      ],
+      "file": "gate_models.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/_helpers.py",
+        "gate_checks/forensic_cluster_runners/advanced_checks.py",
+        "gate_checks/forensic_cluster_runners/core.py",
+        "gate_checks/forensic_cluster_runners/integrity_checks.py",
+        "gate_checks/forensic_cluster_runners/quality_checks.py",
+        "gate_checks/forensic_clusters/api_protocol.py",
+        "gate_checks/forensic_clusters/async_quality.py",
+        "gate_checks/forensic_clusters/code_style.py",
+        "gate_checks/forensic_clusters/core.py",
+        "gate_checks/forensic_clusters/data_quality.py",
+        "gate_checks/forensic_clusters/dead_code.py",
+        "gate_checks/forensic_clusters/edit_mutation.py",
+        "gate_checks/forensic_clusters/exception_boundary.py",
+        "gate_checks/forensic_clusters/legacy_debt.py",
+        "gate_checks/forensic_clusters/static_analysis.py",
+        "gate_checks/forensic_clusters/structural_quality.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "logging",
+        "time",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "dataclasses.field",
+        "pathlib",
+        "pathlib.Path",
+        "typing",
+        "typing.TYPE_CHECKING",
+        "typing.Any",
+        "typing.Mapping",
+        "typing.Optional",
+        "cortex_forensic._shared",
+        "cortex_forensic._shared.coerce_float",
+        "cortex_forensic._shared.EvidenceReference",
+        "cortex_forensic._shared.GateCategory",
+        "cortex_forensic._shared.GateCheckResult",
+        "cortex_forensic._shared.GateFileSnapshot",
+        "cortex_forensic._shared.GateFinding",
+        "cortex_forensic._shared.GateImpact",
+        "cortex_forensic._shared.GateSeverity",
+        "cortex_forensic._shared.GateVerdict",
+        "cortex_forensic._shared.RepairKind",
+        "cortex_forensic._shared.RepoGateProfile",
+        "cortex_forensic._stubs",
+        "cortex_forensic._stubs.ValidationContractProfile",
+        "cortex_forensic._stubs.PocketCoderForensicReport"
+      ],
+      "language": "python",
+      "size_lines": 389,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_now",
+        "HookTraceEntry",
+        "RuntimeState",
+        "VerificationSummary",
+        "HookTraceLoadProvenance",
+        "DraftMessageEvidence",
+        "PostExecGateContext",
+        "detect_source_package_roots",
+        "from_mapping",
+        "to_dict",
+        "from_mapping",
+        "to_dict",
+        "from_mapping",
+        "to_dict",
+        "from_mapping",
+        "to_dict",
+        "from_mapping",
+        "to_dict",
+        "to_dict",
+        "_pick",
+        "_str_tuple"
+      ],
+      "symbols_used_external": [],
+      "tags": [
+        "high_fan_in",
+        "high_fan_out"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_packs/__init__.py"
+      ],
+      "file": "gate_packs/__init__.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [],
+      "language": "python",
+      "size_lines": 1,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_packs/universal.py"
+      ],
+      "file": "gate_packs/universal.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "typing",
+        "typing.Any",
+        "cortex_forensic.gate_checks.broad_except_checks",
+        "cortex_forensic.gate_checks.broad_except_checks.run_broad_except_checks",
+        "cortex_forensic.gate_checks.embedded_string_checks",
+        "cortex_forensic.gate_checks.embedded_string_checks.run_embedded_string_checks",
+        "cortex_forensic.gate_checks.duplication_checks",
+        "cortex_forensic.gate_checks.duplication_checks.run_duplication_checks",
+        "cortex_forensic.gate_checks.file_proliferation_checks",
+        "cortex_forensic.gate_checks.file_proliferation_checks.run_file_proliferation_checks",
+        "cortex_forensic.gate_checks.fix_without_test_checks",
+        "cortex_forensic.gate_checks.fix_without_test_checks.run_fix_without_test_checks",
+        "cortex_forensic.gate_checks.empty_output_checks",
+        "cortex_forensic.gate_checks.empty_output_checks.run_empty_output_checks",
+        "cortex_forensic.gate_checks.semantic_intent_checks",
+        "cortex_forensic.gate_checks.semantic_intent_checks.run_semantic_intent_checks",
+        "cortex_forensic.gate_checks.temporal_freshness_checks",
+        "cortex_forensic.gate_checks.temporal_freshness_checks.run_temporal_freshness_checks",
+        "cortex_forensic.gate_checks.hallucination_checks",
+        "cortex_forensic.gate_checks.hallucination_checks.run_hallucination_checks",
+        "cortex_forensic.gate_checks.encoding_checks",
+        "cortex_forensic.gate_checks.encoding_checks.run_encoding_checks",
+        "cortex_forensic.gate_checks.encoding_checks.run_subprocess_encoding_checks",
+        "cortex_forensic.gate_checks.authority_checks",
+        "cortex_forensic.gate_checks.authority_checks.run_authority_checks",
+        "cortex_forensic.gate_checks.runtime_behavior_checks",
+        "cortex_forensic.gate_checks.runtime_behavior_checks.run_runtime_duplicate_side_effect_checks",
+        "cortex_forensic.gate_checks.contract_shape_drift_checks",
+        "cortex_forensic.gate_checks.contract_shape_drift_checks.run_contract_shape_drift_checks",
+        "cortex_forensic.gate_checks.toctou_checks",
+        "cortex_forensic.gate_checks.toctou_checks.run_toctou_check_then_act",
+        "cortex_forensic.gate_checks.atomic_write_checks",
+        "cortex_forensic.gate_checks.atomic_write_checks.run_atomic_write_safety_checks",
+        "cortex_forensic.gate_checks.context_fallback_checks",
+        "cortex_forensic.gate_checks.context_fallback_checks.run_context_fallback_save_checks",
+        "cortex_forensic.gate_checks.broad_except_hidden_sentinel_checks",
+        "cortex_forensic.gate_checks.broad_except_hidden_sentinel_checks.run_broad_except_hidden_sentinel_checks",
+        "cortex_forensic.gate_checks.god_object_zones_checks",
+        "cortex_forensic.gate_checks.god_object_zones_checks.run_god_object_zones_checks",
+        "cortex_forensic.gate_checks.forensic_cluster_runners",
+        "cortex_forensic.gate_checks.forensic_cluster_runners.run_forensic_cluster_checks",
+        "cortex_forensic.gate_checks.project_specific_runner",
+        "cortex_forensic.gate_checks.project_specific_runner.run_project_specific_checks",
+        "cortex_forensic.gate_checks.fallback_checks",
+        "cortex_forensic.gate_checks.fallback_checks.run_fallback_checks",
+        "cortex_forensic.gate_checks.config_ssot_checks",
+        "cortex_forensic.gate_checks.config_ssot_checks.run_config_ssot_checks",
+        "cortex_forensic.gate_checks.performance_checks",
+        "cortex_forensic.gate_checks.performance_checks.run_performance_checks",
+        "cortex_forensic.gate_checks.size_complexity_checks",
+        "cortex_forensic.gate_checks.size_complexity_checks.run_size_complexity_checks",
+        "cortex_forensic.gate_checks.size_complexity_checks.run_hotspot_inflation_checks",
+        "cortex_forensic.gate_checks.testing_checks",
+        "cortex_forensic.gate_checks.testing_checks.run_testing_checks",
+        "cortex_forensic.gate_checks.test_quality_checks",
+        "cortex_forensic.gate_checks.test_quality_checks.run_empty_test_module_checks",
+        "cortex_forensic.gate_checks.test_quality_checks.run_simulated_test_checks",
+        "cortex_forensic.gate_checks.test_quality_checks.run_test_quality_checks",
+        "cortex_forensic.gate_checks.test_quality_checks.run_test_suite_masking_checks",
+        "cortex_forensic.gate_checks.reporting_checks",
+        "cortex_forensic.gate_checks.reporting_checks.run_reporting_checks",
+        "cortex_forensic.gate_checks.syntax_validity_checks",
+        "cortex_forensic.gate_checks.syntax_validity_checks.run_syntax_validity_checks",
+        "cortex_forensic.gate_checks.provider_capability_checks",
+        "cortex_forensic.gate_checks.provider_capability_checks.check_provider_capabilities",
+        "cortex_forensic.gate_checks.import_integrity_checks",
+        "cortex_forensic.gate_checks.import_integrity_checks.run_import_integrity_checks",
+        "cortex_forensic.gate_checks.import_integrity_checks.run_init_order_regression_checks",
+        "cortex_forensic.gate_checks.boundary_breach_checks",
+        "cortex_forensic.gate_checks.boundary_breach_checks.run_boundary_breach_checks",
+        "cortex_forensic.gate_checks.conflict_checks",
+        "cortex_forensic.gate_checks.conflict_checks.run_conflict_touch_checks",
+        "cortex_forensic.gate_checks.refactor_completeness_checks",
+        "cortex_forensic.gate_checks.refactor_completeness_checks.run_refactor_completeness_checks",
+        "cortex_forensic.gate_checks.type_checking_checks",
+        "cortex_forensic.gate_checks.type_checking_checks.run_type_checking_checks",
+        "cortex_forensic.gate_checks.reliability_checks",
+        "cortex_forensic.gate_checks.reliability_checks.run_reliability_checks",
+        "cortex_forensic.gate_checks.security_injection_checks",
+        "cortex_forensic.gate_checks.security_injection_checks.run_security_injection_checks",
+        "cortex_forensic.gate_checks.config_safety_checks",
+        "cortex_forensic.gate_checks.config_safety_checks.run_config_safety_checks",
+        "cortex_forensic.gate_checks.implementation_overfit_checks",
+        "cortex_forensic.gate_checks.implementation_overfit_checks.run_implementation_overfit_checks",
+        "cortex_forensic.gate_checks.stuck_feature_flag_checks",
+        "cortex_forensic.gate_checks.stuck_feature_flag_checks.run_stuck_feature_flag_checks",
+        "cortex_forensic.gate_checks.hunter_artifact_completeness_check",
+        "cortex_forensic.gate_checks.hunter_artifact_completeness_check.run_hunter_artifact_completeness_checks",
+        "cortex_forensic.gate_checks.export_completeness_checks",
+        "cortex_forensic.gate_checks.export_completeness_checks.run_export_completeness_checks",
+        "cortex_forensic.gate_checks.imports_in_function_checks",
+        "cortex_forensic.gate_checks.imports_in_function_checks.run_imports_in_function_checks",
+        "cortex_forensic.meta_findings",
+        "cortex_forensic.meta_findings.meta_runner_stub",
+        "cortex_forensic._shared",
+        "cortex_forensic._shared.GateCategory"
+      ],
+      "language": "python",
+      "size_lines": 167,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [],
+      "symbols_used_external": [],
+      "tags": [
+        "high_fan_out"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "gate_registry.py"
+      ],
+      "file": "gate_registry.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "cortex_forensic.gate_packs.universal",
+        "cortex_forensic.gate_packs.universal.GATE_SPECS",
+        "cortex_forensic._shared",
+        "cortex_forensic._shared.GateCategory",
+        "logging"
+      ],
+      "language": "python",
+      "size_lines": 22,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_u_entry"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "language_profiles.py"
+      ],
+      "file": "language_profiles.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "dataclasses.field",
+        "logging"
+      ],
+      "language": "python",
+      "size_lines": 219,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "LanguageProfile",
+        "get_profile_for_extension",
+        "get_profile_for_lang"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "meta_findings.py"
+      ],
+      "file": "meta_findings.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "logging",
+        "threading",
+        "collections",
+        "collections.deque",
+        "typing",
+        "typing.Any",
+        "typing.Optional",
+        "cortex_forensic._shared",
+        "cortex_forensic._shared.EvidenceReference",
+        "cortex_forensic._shared.GateCategory",
+        "cortex_forensic._shared.GateCheckResult",
+        "cortex_forensic._shared.GateFinding",
+        "cortex_forensic._shared.GateImpact",
+        "cortex_forensic._shared.GateSeverity"
+      ],
+      "language": "python",
+      "size_lines": 196,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "emit_meta_finding",
+        "drain_meta_findings",
+        "peek_meta_findings",
+        "reset_meta_findings",
+        "meta_runner_stub"
+      ],
+      "symbols_used_external": [],
+      "tags": [
+        "high_fan_out"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "self_audit.py"
+      ],
+      "file": "self_audit.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "argparse",
+        "concurrent.futures",
+        "json",
+        "sys",
+        "time",
+        "traceback",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "dataclasses.field",
+        "pathlib",
+        "pathlib.Path",
+        "typing",
+        "typing.Any",
+        "typing.Callable",
+        "typing.Optional",
+        "logging",
+        "cortex_forensic._shared",
+        "cortex_forensic._shared.GateCheckResult",
+        "cortex_forensic._shared.GateFinding",
+        "cortex_forensic.gate_models",
+        "cortex_forensic.gate_models.PostExecGateContext",
+        "cortex_forensic.gate_models.RuntimeState",
+        "cortex_forensic.gate_models.VerificationSummary",
+        "cortex_forensic.gate_models.detect_source_package_roots",
+        "cortex_forensic.gate_packs.universal",
+        "cortex_forensic.gate_packs.universal.GATE_FLAGS",
+        "cortex_forensic.gate_registry",
+        "cortex_forensic.gate_registry.DEFAULT_GATE_CHECKS",
+        "cortex_forensic._stubs",
+        "cortex_forensic._stubs.ValidationContractProfile",
+        "cortex_forensic._stubs.PocketCoderForensicReport",
+        "cortex_forensic.source_analysis",
+        "cortex_forensic.source_analysis.is_source_file",
+        "cortex_forensic.meta_findings",
+        "cortex_forensic.meta_findings.emit_meta_finding",
+        "cortex_forensic.gate_checks.common",
+        "cortex_forensic.gate_checks.common.normalize_path",
+        "cortex_forensic.gate_checks.common.read_snapshot",
+        "cortex_forensic.meta_findings.drain_meta_findings"
+      ],
+      "language": "python",
+      "size_lines": 449,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "_is_self_match_finding",
+        "discover_source_files",
+        "_probe_meta_integrity",
+        "build_synthetic_context",
+        "GateOutcome",
+        "run_gates",
+        "_run_gates_parallel",
+        "_run_single_gate",
+        "finding_to_dict",
+        "build_json_report",
+        "filter_findings_by_severity",
+        "print_human_summary",
+        "main"
+      ],
+      "symbols_used_external": [],
+      "tags": [
+        "high_fan_out"
+      ]
+    },
+    {
+      "confidence": 0.95,
+      "cycles": [],
+      "evidence": [
+        "source_analysis.py"
+      ],
+      "file": "source_analysis.py",
+      "freshness": "2026-06-25T08:30:33.433950Z",
+      "imports_in": [
+        "gate_checks/forensic_cluster_runners/advanced_checks.py",
+        "gate_checks/forensic_cluster_runners/quality_checks.py",
+        "gate_checks/forensic_clusters/structural_quality.py"
+      ],
+      "imports_out": [
+        "__future__",
+        "__future__.annotations",
+        "re",
+        "dataclasses",
+        "dataclasses.dataclass",
+        "pathlib",
+        "pathlib.Path",
+        "cortex_forensic.language_profiles",
+        "cortex_forensic.language_profiles.get_profile_for_extension",
+        "cortex_map_builder.source_adapters",
+        "cortex_map_builder.source_adapters.get_adapter_for_file",
+        "logging",
+        "cortex_forensic.gate_checks.common",
+        "cortex_forensic.gate_checks.common.extract_python_functions"
+      ],
+      "language": "python",
+      "size_lines": 175,
+      "source": "static_scan",
+      "status": "inferred",
+      "symbols_defined": [
+        "FunctionInfo",
+        "is_source_file",
+        "is_test_file",
+        "get_language_id",
+        "get_generic_stems",
+        "get_shared_families",
+        "get_flow_markers",
+        "get_exclude_dirs",
+        "extract_functions",
+        "_extract_python_functions",
+        "_extract_js_functions"
+      ],
+      "symbols_used_external": [],
+      "tags": []
+    }
+  ],
+  "map_name": "structural",
+  "produced_by": "BRAIN.autoforensics.map_builder.v1",
+  "schema_version": "1.0.0"
+}

@@ -1,0 +1,28 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "c92eddaf77d08f9b0b746b3c86f2736b",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "c92eddaf77d08f9b0b746b3c86f2736b",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "logging",
+      "subprocess",
+      "pathlib",
+      "pathlib.Path"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 178,
+    "symbols_defined": [
+      "git_show",
+      "git_log_numstat",
+      "git_has_repo",
+      "git_head_sha"
+    ],
+    "write_calls": []
+  }
+}

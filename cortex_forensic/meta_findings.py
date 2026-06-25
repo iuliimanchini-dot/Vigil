@@ -176,8 +176,19 @@ def emit_meta_finding(
 
 def drain_meta_findings() -> list[GateFinding]:
     with _lock:
-        out = list(_pending)
+        raw = list(_pending)
         _pending.clear()
+    # Dedup by fingerprint: two gates emitting the same parse-error for the same
+    # (file, line) produce identical fingerprints — collapse to one finding.
+    seen: set[str] = set()
+    out: list[GateFinding] = []
+    for f in raw:
+        fp = getattr(f, "fingerprint", None) or ""
+        if fp and fp in seen:
+            continue
+        if fp:
+            seen.add(fp)
+        out.append(f)
     return out
 
 

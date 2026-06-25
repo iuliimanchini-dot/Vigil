@@ -1,4 +1,4 @@
-﻿"""Gate G.6 -- god_object_zones: detects responsibility-zone inflation in Python files.
+"""Gate G.6 -- god_object_zones: detects responsibility-zone inflation in Python files.
 
 A file is flagged when it exposes >=3 distinct function-name zones (everything
 before the first underscore in the name maps to a zone in KNOWN_ZONES) AND the

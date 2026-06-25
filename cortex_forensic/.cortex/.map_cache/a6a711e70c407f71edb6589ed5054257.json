@@ -1,0 +1,37 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "a6a711e70c407f71edb6589ed5054257",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "a6a711e70c407f71edb6589ed5054257",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "pathlib",
+      "pathlib.Path",
+      "typing",
+      "typing.Any",
+      "typing.Optional",
+      "traceback",
+      "cortex_forensic.self_audit",
+      "cortex_forensic.self_audit.discover_source_files",
+      "cortex_forensic.self_audit.build_synthetic_context",
+      "cortex_forensic.self_audit.run_gates",
+      "cortex_forensic.self_audit.build_json_report",
+      "cortex_forensic.self_audit.filter_findings_by_severity",
+      "cortex_forensic.self_audit._probe_meta_integrity",
+      "cortex_forensic.self_audit.GateOutcome",
+      "cortex_forensic.meta_findings",
+      "cortex_forensic.meta_findings.drain_meta_findings"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 180,
+    "symbols_defined": [
+      "run_forensic_audit"
+    ],
+    "write_calls": []
+  }
+}

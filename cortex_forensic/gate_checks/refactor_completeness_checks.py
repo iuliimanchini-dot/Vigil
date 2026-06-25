@@ -1,4 +1,4 @@
-﻿"""Refactor completeness forensic gate.
+"""Refactor completeness forensic gate.
 
 refactor.partial_rename: detect AI artifact where a symbol was renamed in some
 files but the old name persists in others — i.e. an incomplete rename.

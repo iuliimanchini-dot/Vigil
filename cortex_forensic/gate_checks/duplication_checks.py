@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 
@@ -56,9 +56,18 @@ def run_duplication_checks(ctx: PostExecGateContext):
                 continue
             touched_hashes.setdefault(hash_normalized_code(snippet), []).append((snapshot.path, func_name))
     # cross_touched_duplicate is designed for incremental AI edits (2-20 files).
-    # In bulk-scan mode (self-audit touches all files), every similar helper would
-    # be flagged as a duplicate — meaningless noise. Skip when touched set is large.
-    if len(ctx.touched_files) > 100:
+    # In a full-scan (self-audit), touched_files == all source files, so every
+    # pair of structurally-similar helpers cross-matches — meaningless noise.
+    #
+    # Full-scan detection: explicit flag OR (large touched set that equals all
+    # known snapshots — at least 10 files so genuine 2-20 file incremental
+    # changes are never mis-classified as full scans).
+    _MIN_FULL_SCAN_FILES = 10
+    _is_full_scan = getattr(ctx, "is_full_scan", False) or (
+        len(ctx.touched_files) >= _MIN_FULL_SCAN_FILES
+        and set(ctx.touched_files) >= set(ctx.file_snapshots.keys())
+    )
+    if _is_full_scan:
         touched_hashes.clear()
 
     seen_pairs: set[tuple[str, str, str, str]] = set()

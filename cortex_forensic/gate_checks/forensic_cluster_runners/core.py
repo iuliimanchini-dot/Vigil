@@ -168,7 +168,12 @@ def run_forensic_cluster_checks(ctx: PostExecGateContext) -> GateCheckResult:
             ("cluster53_legacy_compat_debt", lambda: _check_legacy_compat_debt(ctx)),
         ]
 
+        from cortex_forensic.self_audit import get_cancel_event
         for label, fn in _checks:
+            _cancel = get_cancel_event()
+            if _cancel is not None and _cancel.is_set():
+                _log.info("forensic_clusters: cancel_event set, stopping at %s", label)
+                break
             _elapsed = time.monotonic() - _start
             if _elapsed > _FORENSIC_CLUSTERS_TIMEOUT - 10:  # 10s safety margin
                 _log.warning(

@@ -1,4 +1,4 @@
-﻿"""FX-V5-012 hunter artifact completeness check.
+"""FX-V5-012 hunter artifact completeness check.
 
 Soft-severity gate that scans <project>/.cortex/context_hunter/*.json and
 emits a finding for each file that is corrupted, unparseable, or missing

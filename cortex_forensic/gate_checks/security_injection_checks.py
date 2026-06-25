@@ -1,4 +1,4 @@
-﻿"""Security gate: command_injection and path_traversal_hint detection.
+"""Security gate: command_injection and path_traversal_hint detection.
 
 security.command_injection:
   subprocess.* called with shell=True AND first positional arg is a

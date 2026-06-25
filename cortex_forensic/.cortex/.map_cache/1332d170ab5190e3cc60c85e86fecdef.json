@@ -1,0 +1,51 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "1332d170ab5190e3cc60c85e86fecdef",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "1332d170ab5190e3cc60c85e86fecdef",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "ast",
+      "hashlib",
+      "pathlib",
+      "pathlib.Path",
+      "typing",
+      "typing.Optional",
+      "typing.Sequence",
+      ".core",
+      "...gate_models",
+      "..common",
+      ".._ast_helpers",
+      "logging",
+      "re",
+      "json"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 800,
+    "symbols_defined": [
+      "assess_edit_consistency",
+      "assess_mutation_verified",
+      "_py_fstring_template",
+      "_py_fstring_is_sql",
+      "_py_format_call_is_sql",
+      "_py_pct_format_is_sql",
+      "_detect_python_sql_injection",
+      "_call_attr_chain",
+      "_detect_python_dangerous_calls",
+      "_detect_python_shell_true",
+      "assess_security_patterns",
+      "assess_test_quality",
+      "assess_import_cycles",
+      "assess_roundtrip_consistency",
+      "assess_shared_mutable_state",
+      "assess_dependency_vulnerabilities",
+      "_dfs"
+    ],
+    "write_calls": []
+  }
+}

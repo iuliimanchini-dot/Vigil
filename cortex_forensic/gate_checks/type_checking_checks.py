@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """Gate checks for type annotation coverage and `Any` erosion.
 

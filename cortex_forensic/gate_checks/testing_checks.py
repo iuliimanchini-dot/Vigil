@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from cortex_forensic._shared import is_executor_metadata_path
 from cortex_forensic._shared import GateCategory, GateImpact, GateSeverity, RepairKind

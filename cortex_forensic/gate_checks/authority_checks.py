@@ -1,4 +1,4 @@
-﻿"""Authority-related forensic checks (Finding 6.1).
+"""Authority-related forensic checks (Finding 6.1).
 
 illegal_authority_writer: flag new writer functions appearing in modules that
 previously had none -- signals unauthorized authority expansion.

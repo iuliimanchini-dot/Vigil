@@ -1,0 +1,48 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "a1daddb7749fc77a455d9e54e1cbc118",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "a1daddb7749fc77a455d9e54e1cbc118",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "...source_analysis",
+      "...gate_models",
+      "..forensic_clusters",
+      "._helpers",
+      "logging",
+      "...gate_checks.forensic_clusters.legacy_debt",
+      "...gate_checks.forensic_clusters.structural_quality"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 315,
+    "symbols_defined": [
+      "_check_hardcoded_paths",
+      "_check_boundary_validation",
+      "_check_unreachable_code",
+      "_check_shadowed_builtins",
+      "_check_mutable_defaults",
+      "_check_resource_leaks",
+      "_check_docstring_params",
+      "_check_broad_catch_no_reraise",
+      "_check_debug_prints",
+      "_check_commented_code",
+      "_check_missing_await",
+      "_check_unchecked_response",
+      "_check_naive_timezone",
+      "_check_near_duplicate_code",
+      "_check_missing_null_check",
+      "_check_path_concatenation",
+      "_check_log_without_context",
+      "_check_test_secrets",
+      "_check_unpinned_dependencies",
+      "_check_legacy_compat_debt",
+      "_check_shared_logic_fragmentation"
+    ],
+    "write_calls": []
+  }
+}

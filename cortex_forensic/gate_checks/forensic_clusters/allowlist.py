@@ -1,4 +1,4 @@
-﻿"""False-positive allowlist infrastructure.
+"""False-positive allowlist infrastructure.
 
 Provides AllowlistEntry, load_allowlist, revalidate_allowlist, save_allowlist,
 and filter_by_allowlist for managing known false positives in forensic checks.

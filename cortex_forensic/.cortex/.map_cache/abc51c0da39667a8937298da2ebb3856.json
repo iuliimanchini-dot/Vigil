@@ -1,0 +1,35 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "abc51c0da39667a8937298da2ebb3856",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "abc51c0da39667a8937298da2ebb3856",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      ".core",
+      "...gate_models",
+      "..common",
+      ".._ast_helpers",
+      "logging",
+      "ast",
+      "re"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 732,
+    "symbols_defined": [
+      "assess_unreachable_code",
+      "_ast_shadowed_builtins_python",
+      "assess_shadowed_builtins",
+      "assess_mutable_defaults",
+      "assess_resource_leaks",
+      "assess_docstring_params",
+      "_indent",
+      "_noqa"
+    ],
+    "write_calls": []
+  }
+}

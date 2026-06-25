@@ -1,4 +1,4 @@
-﻿"""Boundary breach forensic gate (Finding 6.5).
+"""Boundary breach forensic gate (Finding 6.5).
 
 boundary_breach: detect when a PR touches files that fall outside every
 declared refactor boundary listed in .cortex/maps/70_refactor_boundaries.json.

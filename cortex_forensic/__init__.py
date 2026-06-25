@@ -58,6 +58,7 @@ def run_forensic_audit(
     gates: Optional[list[str]] = None,
     severity: str = "LOW",
     all_languages: bool = True,
+    cancel_event: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Run static forensic gates on *project_dir* and return structured findings.
 
@@ -145,7 +146,7 @@ def run_forensic_audit(
             "errors": [{"check_id": "build_context", "error": traceback.format_exc()}],
         }
 
-    outcomes, gates_skipped = run_gates(ctx, gates_filter, workers=1)
+    outcomes, gates_skipped = run_gates(ctx, gates_filter, workers=1, cancel_event=cancel_event)
 
     # Probe audit infrastructure for corrupted artifacts
     _probe_meta_integrity(project_dir)

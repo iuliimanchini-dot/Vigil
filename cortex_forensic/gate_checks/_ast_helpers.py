@@ -1,4 +1,4 @@
-﻿"""AST-based helpers shared across line-based forensic gates.
+"""AST-based helpers shared across line-based forensic gates.
 
 Motivation (F14a, 2026-04-23)
 ----------------------------

@@ -1,4 +1,4 @@
-﻿"""Runtime behavior forensic checks.
+"""Runtime behavior forensic checks.
 
 Includes:
   - runtime.claim_contradiction: verification passes but runtime health is unhealthy.

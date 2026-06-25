@@ -1,4 +1,4 @@
-﻿"""Unresolved high-conflict touch forensic gate (Finding 6.6).
+"""Unresolved high-conflict touch forensic gate (Finding 6.6).
 
 conflict_touch: detect when a PR touches files flagged in the conflict map
 as unresolved and with severity high or critical.

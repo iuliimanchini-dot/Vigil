@@ -9,12 +9,23 @@ import argparse
 import concurrent.futures
 import json
 import sys
+import threading
 import time
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 import logging
+
+# Thread-local storage: run_gates sets _tl_cancel.event before dispatching each
+# gate so cluster runners (which don't receive cancel_event directly) can check
+# the same event via get_cancel_event().
+_tl_cancel = threading.local()
+
+
+def get_cancel_event() -> Optional[Any]:
+    """Return the cancel_event for the current thread, or None."""
+    return getattr(_tl_cancel, "event", None)
 
 from cortex_forensic._shared import GateCheckResult, GateFinding
 from cortex_forensic.gate_models import (
@@ -140,6 +151,80 @@ _FILE_BASED_GATES: frozenset[str] = frozenset({
 })
 
 
+def _load_gate_profile_if_present(project_dir: Path) -> "Optional[Any]":
+    """Load gate_profile.json from project_dir (or .cortex/gate_profile.json).
+
+    Returns a RepoGateProfile on success, None if no file found or on error.
+    Error is logged but never raised — missing profile is not fatal.
+    """
+    from cortex_forensic._shared import RepoGateProfile, GateCategory, GateImpact
+
+    _PROFILE_CANDIDATES = ("gate_profile.json", ".cortex/gate_profile.json")
+    _GENERIC_GENERATED_ROOTS: tuple[str, ...] = (
+        ".git", "__pycache__", ".pytest_cache", "dist", "build",
+        "node_modules", "venv", ".venv",
+    )
+    _GENERIC_SIZE_THRESHOLDS: dict[str, int] = {
+        "file_warn": 600, "file_revise": 800,
+        "function_warn": 80, "function_revise": 120,
+        "nesting_warn": 4, "nesting_revise": 6,
+    }
+
+    def _impact_from_value(v: object) -> GateImpact:
+        try:
+            return GateImpact(str(v))
+        except ValueError:
+            return GateImpact.WARN
+
+    def _profile_from_dict(payload: dict, path: Path) -> RepoGateProfile:
+        enabled_raw = payload.get("enabled_categories") or [item.value for item in GateCategory]
+        fallback_raw = payload.get("forbidden_fallback_patterns") or {}
+        canonical_raw = payload.get("canonical_literal_owners") or {}
+        size = payload.get("size_thresholds") or {}
+        defaults = _GENERIC_SIZE_THRESHOLDS
+        return RepoGateProfile(
+            profile_name=str(payload.get("profile_name") or "generic"),
+            version=str(payload.get("version") or "1.0"),
+            generated_roots=tuple(payload.get("generated_roots") or _GENERIC_GENERATED_ROOTS),
+            vendored_roots=tuple(payload.get("vendored_roots") or (".vendor", "vendor", "node_modules")),
+            forbidden_roots=tuple(payload.get("forbidden_roots") or ()),
+            critical_roots=tuple(payload.get("critical_roots") or ()),
+            allowlisted_large_files=tuple(payload.get("allowlisted_large_files") or ()),
+            performance_sensitive_roots=tuple(payload.get("performance_sensitive_roots") or ()),
+            required_test_roots=tuple(payload.get("required_test_roots") or ()),
+            canonical_literal_owners={str(k): tuple(v) for k, v in canonical_raw.items()},
+            forbidden_fallback_patterns={str(k): _impact_from_value(v) for k, v in fallback_raw.items()},
+            size_thresholds={
+                "file_warn": int(size.get("file_warn", defaults["file_warn"])),
+                "file_revise": int(size.get("file_revise", defaults["file_revise"])),
+                "function_warn": int(size.get("function_warn", defaults["function_warn"])),
+                "function_revise": int(size.get("function_revise", defaults["function_revise"])),
+                "nesting_warn": int(size.get("nesting_warn", defaults["nesting_warn"])),
+                "nesting_revise": int(size.get("nesting_revise", defaults["nesting_revise"])),
+            },
+            severity_overrides={str(k): _impact_from_value(v) for k, v in (payload.get("severity_overrides") or {}).items()},
+            required_proofs_overrides={str(k): tuple(v) for k, v in (payload.get("required_proofs_overrides") or {}).items()},
+            reporting_required_artifacts=tuple(payload.get("reporting_required_artifacts") or ()),
+            enabled_categories=tuple(GateCategory(item) for item in enabled_raw),
+            enabled_checks=tuple(payload.get("enabled_checks") or ()),
+            disabled_checks=tuple(payload.get("disabled_checks") or ()),
+            profile_path=str(path),
+        )
+
+    root = Path(project_dir).resolve()
+    for candidate in _PROFILE_CANDIDATES:
+        path = root / candidate
+        if path.is_file():
+            try:
+                import json as _json
+                payload = _json.loads(path.read_text(encoding="utf-8"))
+                return _profile_from_dict(payload, path)
+            except Exception as exc:
+                _log.warning("gate_profile load failed (%s): %s", path, exc)
+                return None
+    return None
+
+
 def build_synthetic_context(project_dir: Path, source_files: list[str]) -> PostExecGateContext:
     """Build minimal PostExecGateContext treating every source file as touched."""
     from cortex_forensic.gate_checks.common import normalize_path, read_snapshot
@@ -148,6 +233,7 @@ def build_synthetic_context(project_dir: Path, source_files: list[str]) -> PostE
         normalize_path(p): read_snapshot(project_dir, p)
         for p in source_files
     }
+    repo_profile = _load_gate_profile_if_present(project_dir)
     return PostExecGateContext(
         project_dir=project_dir,
         session_number=0,
@@ -163,6 +249,7 @@ def build_synthetic_context(project_dir: Path, source_files: list[str]) -> PostE
         changed_files_observed=tuple(source_files),
         source_package_roots=detect_source_package_roots(project_dir),
         file_snapshots=file_snapshots,
+        repo_profile=repo_profile,
         project_context=None,
     )
 
@@ -181,8 +268,18 @@ def run_gates(
     gates_filter: Optional[set[str]] = None,
     *,
     workers: int = 1,
+    cancel_event: Optional[Any] = None,
 ) -> tuple[list[GateOutcome], list[dict[str, str]]]:
-    """Run all file-based gates (or the subset in gates_filter) against ctx."""
+    """Run all file-based gates (or the subset in gates_filter) against ctx.
+
+    Parameters
+    ----------
+    cancel_event:
+        Optional threading.Event (or any object with an .is_set() method).
+        When set, the per-gate loop stops before the next gate starts.
+        The MCP _jobs.py injects this by inspecting co_varnames, so the
+        parameter name must stay as ``cancel_event``.
+    """
     gates_skipped: list[dict[str, str]] = []
     runnable: list[tuple[str, Callable[[PostExecGateContext], GateCheckResult]]] = []
     for check_id, _, runner in DEFAULT_GATE_CHECKS:
@@ -200,7 +297,18 @@ def run_gates(
     if workers > 1 and len(runnable) > 1:
         outcomes = _run_gates_parallel(runnable, ctx, workers)
     else:
-        outcomes = [_run_single_gate(check_id, runner, ctx) for check_id, runner in runnable]
+        outcomes = []
+        # Store cancel_event in thread-local so cluster runners can access it
+        # without a signature change (get_cancel_event() from this module).
+        _tl_cancel.event = cancel_event
+        try:
+            for check_id, runner in runnable:
+                if cancel_event is not None and cancel_event.is_set():
+                    _log.info("run_gates: cancel_event set, stopping after %d gates", len(outcomes))
+                    break
+                outcomes.append(_run_single_gate(check_id, runner, ctx))
+        finally:
+            _tl_cancel.event = None
     return outcomes, gates_skipped
 
 

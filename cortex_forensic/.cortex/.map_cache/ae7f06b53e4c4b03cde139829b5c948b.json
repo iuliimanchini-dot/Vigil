@@ -1,0 +1,30 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "ae7f06b53e4c4b03cde139829b5c948b",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "ae7f06b53e4c4b03cde139829b5c948b",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      ".core",
+      "...gate_models",
+      "..common",
+      "logging",
+      "re"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 225,
+    "symbols_defined": [
+      "_extract_except_body",
+      "_is_swallowed",
+      "assess_exception_swallowing",
+      "assess_hardcoded_paths",
+      "assess_boundary_validation"
+    ],
+    "write_calls": []
+  }
+}

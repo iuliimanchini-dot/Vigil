@@ -1,0 +1,46 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "cfafa09e69f3c9967b72fdac39026bce",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "cfafa09e69f3c9967b72fdac39026bce",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "ast",
+      "json",
+      "logging",
+      "os",
+      "re",
+      "sys",
+      "pathlib",
+      "pathlib.Path",
+      "typing",
+      "typing.Literal",
+      "tomllib"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 574,
+    "symbols_defined": [
+      "_normalize_explicit",
+      "get_explicit_deployment",
+      "detect_file_deployment",
+      "_path_in_ignored_tree",
+      "_read_pyproject_classifiers",
+      "_read_setuppy_classifiers",
+      "_classify_from_classifiers",
+      "_has_dockerfile",
+      "_gha_runners",
+      "_windows_scripts_outside_dev",
+      "_linux_only_deps_in_requirements",
+      "_detect_project_uncached",
+      "detect_project_deployment",
+      "clear_project_cache",
+      "resolve_deployment"
+    ],
+    "write_calls": []
+  }
+}

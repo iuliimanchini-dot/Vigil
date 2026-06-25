@@ -1,4 +1,4 @@
-﻿"""Forensic check: detect Python/JS escape conflicts in embedded code strings.
+"""Forensic check: detect Python/JS escape conflicts in embedded code strings.
 
 When JavaScript or CSS lives inside Python triple-quoted strings (*_js.py,
 *_css.py, *_assets*.py), Python interprets \\n as literal newline. Inside a

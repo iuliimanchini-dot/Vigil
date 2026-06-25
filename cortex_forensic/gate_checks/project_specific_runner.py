@@ -1,4 +1,4 @@
-﻿"""Dynamic loader and runner for project-specific forensic gates.
+"""Dynamic loader and runner for project-specific forensic gates.
 
 Project-specific gates live under ``.prompt-engineer/forensic_gates/``.
 

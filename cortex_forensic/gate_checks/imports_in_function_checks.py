@@ -1,4 +1,4 @@
-﻿"""Detect imports inside function bodies — should be at module top.
+"""Detect imports inside function bodies — should be at module top.
 
 Pattern caught:
 

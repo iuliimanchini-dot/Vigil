@@ -1,4 +1,4 @@
-﻿"""TOCTOU check-then-act detector (Finding G.1 plan v7).
+"""TOCTOU check-then-act detector (Finding G.1 plan v7).
 
 Detects Time-Of-Check-To-Time-Of-Use patterns where a resource-existence
 check (exists, is_port_in_use, etc.) is immediately followed by a mutation

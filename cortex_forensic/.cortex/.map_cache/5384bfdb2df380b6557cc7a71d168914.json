@@ -1,0 +1,19 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "5384bfdb2df380b6557cc7a71d168914",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "5384bfdb2df380b6557cc7a71d168914",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 1,
+    "symbols_defined": [],
+    "write_calls": []
+  }
+}

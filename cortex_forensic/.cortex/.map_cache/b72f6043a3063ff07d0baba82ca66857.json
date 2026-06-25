@@ -1,0 +1,43 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "b72f6043a3063ff07d0baba82ca66857",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "b72f6043a3063ff07d0baba82ca66857",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "re",
+      "dataclasses",
+      "dataclasses.dataclass",
+      "pathlib",
+      "pathlib.Path",
+      "cortex_forensic.language_profiles",
+      "cortex_forensic.language_profiles.get_profile_for_extension",
+      "cortex_map_builder.source_adapters",
+      "cortex_map_builder.source_adapters.get_adapter_for_file",
+      "logging",
+      "cortex_forensic.gate_checks.common",
+      "cortex_forensic.gate_checks.common.extract_python_functions"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 175,
+    "symbols_defined": [
+      "FunctionInfo",
+      "is_source_file",
+      "is_test_file",
+      "get_language_id",
+      "get_generic_stems",
+      "get_shared_families",
+      "get_flow_markers",
+      "get_exclude_dirs",
+      "extract_functions",
+      "_extract_python_functions",
+      "_extract_js_functions"
+    ],
+    "write_calls": []
+  }
+}

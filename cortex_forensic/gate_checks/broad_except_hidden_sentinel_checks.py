@@ -1,4 +1,4 @@
-﻿"""Broad-except hidden-sentinel detector (Finding G.4 plan v7).
+"""Broad-except hidden-sentinel detector (Finding G.4 plan v7).
 
 Detects exception-handler variants that silently swallow errors without the
 broad_except.swallow check (which targets 'except Exception: pass'):

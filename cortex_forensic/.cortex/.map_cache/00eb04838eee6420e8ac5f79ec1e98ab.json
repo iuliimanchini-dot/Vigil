@@ -1,0 +1,39 @@
+{
+  "adapter_version_hash": "9ba7e5f2fd2d4051",
+  "content_hash": "00eb04838eee6420e8ac5f79ec1e98ab",
+  "format_version": 1,
+  "signals": {
+    "content_hash": "00eb04838eee6420e8ac5f79ec1e98ab",
+    "entity_classes": [],
+    "env_vars": [],
+    "imports_out": [
+      "__future__",
+      "__future__.annotations",
+      "os",
+      "re",
+      "pathlib",
+      "pathlib.Path",
+      "typing",
+      "typing.Iterable",
+      "...gate_models",
+      "..common",
+      "logging",
+      "...source_analysis"
+    ],
+    "is_parseable": true,
+    "side_effects": [],
+    "size_lines": 299,
+    "symbols_defined": [
+      "_stem",
+      "_parent_dir",
+      "_has_import_from",
+      "_flow_markers_found",
+      "assess_shared_logic_fragmentation",
+      "_pattern1_abstraction_bypass",
+      "_pattern2_provider_parallel_flow",
+      "_pattern3_responsibility_proliferation",
+      "_pattern4_generic_shared_fork"
+    ],
+    "write_calls": []
+  }
+}

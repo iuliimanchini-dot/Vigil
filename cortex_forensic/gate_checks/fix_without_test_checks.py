@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from cortex_forensic._shared import SOURCE_EXTENSIONS as _SOURCE_EXTENSIONS
 from cortex_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
