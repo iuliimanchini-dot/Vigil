@@ -69,10 +69,17 @@ def run_forensic_audit(
     gates:
         Optional list of gate check_ids to run. None means run all applicable
         file-based gates (skipping runtime-only gates as per skip_in_static policy).
+        Gates listed in ``<project_dir>/.cortex/disabled_gates.json`` are always
+        skipped (reported in ``meta["gates_skipped"]`` with reason
+        ``"disabled_by_project"``) regardless of this argument.
     severity:
-        Minimum severity level to include in ``findings``. One of:
-        "LOW", "MEDIUM", "HIGH", "CRITICAL" (case-insensitive). Defaults to "LOW"
-        (all findings). Note: meta.* counts are computed BEFORE this filter.
+        Minimum severity floor for the returned ``findings``. One of
+        "LOW", "MEDIUM", "HIGH", "CRITICAL" (case-insensitive); ordering is
+        LOW < MEDIUM < HIGH < CRITICAL. Defaults to "LOW" (all findings).
+        Findings below the floor are removed from ``findings``; the ``meta.*``
+        counts are computed BEFORE this filter (so they always reflect the full
+        finding set), and ``meta["findings_after_severity_filter"]`` records the
+        post-filter count when a non-LOW floor is used.
     all_languages:
         Reserved for future use. Currently all source extensions recognized by
         cortex_map_builder.source_adapters are included automatically.
@@ -89,6 +96,7 @@ def run_forensic_audit(
         run_gates,
         build_json_report,
         filter_findings_by_severity,
+        _load_project_disabled_gates,
         _probe_meta_integrity,
         GateOutcome,
     )
@@ -146,7 +154,15 @@ def run_forensic_audit(
             "errors": [{"check_id": "build_context", "error": traceback.format_exc()}],
         }
 
-    outcomes, gates_skipped = run_gates(ctx, gates_filter, workers=1, cancel_event=cancel_event)
+    # Per-project gate opt-out: <project_dir>/.cortex/disabled_gates.json.
+    # Malformed file → meta finding + empty set (never raises, never silently
+    # disables). Loaded here so the meta finding is drained with the rest below.
+    disabled_gates = _load_project_disabled_gates(project_dir)
+
+    outcomes, gates_skipped = run_gates(
+        ctx, gates_filter, workers=1, cancel_event=cancel_event,
+        disabled_gates=disabled_gates,
+    )
 
     # Probe audit infrastructure for corrupted artifacts
     _probe_meta_integrity(project_dir)

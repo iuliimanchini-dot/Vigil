@@ -136,6 +136,63 @@ def _probe_meta_integrity(project_dir: Path) -> None:
                 emit_meta_finding("meta.artifact_corrupted", path=str(artifact), detail=f"JSONDecodeError: {exc}")
 
 
+def _load_project_disabled_gates(project_dir: Path) -> frozenset[str]:
+    """Load the set of project-disabled gate IDs from ``.cortex/disabled_gates.json``.
+
+    Ported from the Vigil ``cli_forensic_audit._load_project_disabled_gates``.
+    Lets a project switch off noisy gates without code changes. The file may be
+    either a bare JSON list of gate IDs::
+
+        ["broad_except", "duplication"]
+
+    or an object with a ``"disabled"`` key::
+
+        {"disabled": ["broad_except", "duplication"]}
+
+    Narrow exception handling: only JSON-decode, IO/permission, and
+    coercion errors are caught. A corrupt / unreadable file surfaces as a
+    ``meta.profile_load_failed`` finding (via the ``emit_meta_finding``
+    side-channel) and yields an empty set — it never raises and never silently
+    disables. Any other exception (a bug inside json/pathlib, or an upstream
+    monkeypatch) must propagate rather than be swallowed.
+    """
+    from cortex_forensic.meta_findings import emit_meta_finding
+
+    path = Path(project_dir) / ".cortex" / "disabled_gates.json"
+    if not path.is_file():
+        return frozenset()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        emit_meta_finding(
+            "meta.profile_load_failed",
+            path=str(path),
+            detail=f"JSONDecodeError in disabled_gates.json: {exc}",
+        )
+        return frozenset()
+    except (FileNotFoundError, PermissionError, OSError) as exc:
+        emit_meta_finding(
+            "meta.profile_load_failed",
+            path=str(path),
+            detail=f"{type(exc).__name__} reading disabled_gates.json: {exc}",
+        )
+        return frozenset()
+
+    if isinstance(payload, dict):
+        raw = payload.get("disabled", [])
+    else:
+        raw = payload
+    try:
+        return frozenset(str(gid) for gid in raw)
+    except TypeError as exc:
+        emit_meta_finding(
+            "meta.profile_load_failed",
+            path=str(path),
+            detail=f"disabled_gates.json payload is not iterable: {type(raw).__name__}: {exc}",
+        )
+        return frozenset()
+
+
 _FILE_BASED_GATES: frozenset[str] = frozenset({
     "broad_except", "broad_except.hidden_sentinel", "fallback", "context_fallback_save",
     "embedded_string", "duplication", "file_proliferation", "config_ssot", "size_complexity",
@@ -288,6 +345,7 @@ def run_gates(
     *,
     workers: int = 1,
     cancel_event: Optional[Any] = None,
+    disabled_gates: Optional[frozenset[str]] = None,
 ) -> tuple[list[GateOutcome], list[dict[str, str]]]:
     """Run all file-based gates (or the subset in gates_filter) against ctx.
 
@@ -298,10 +356,21 @@ def run_gates(
         When set, the per-gate loop stops before the next gate starts.
         The MCP _jobs.py injects this by inspecting co_varnames, so the
         parameter name must stay as ``cancel_event``.
+    disabled_gates:
+        Optional set of gate check_ids the project has switched off (loaded
+        from ``.cortex/disabled_gates.json``). A disabled gate never runs and
+        is reported in the returned skip list with reason
+        ``"disabled_by_project"``. This takes precedence over every other
+        resolution rule so a project's intent to silence a gate is always
+        visible in ``meta.gates_skipped``.
     """
+    disabled = disabled_gates or frozenset()
     gates_skipped: list[dict[str, str]] = []
     runnable: list[tuple[str, Callable[[PostExecGateContext], GateCheckResult]]] = []
     for check_id, _, runner in DEFAULT_GATE_CHECKS:
+        if check_id in disabled:
+            gates_skipped.append({"gate_id": check_id, "reason": "disabled_by_project"})
+            continue
         if check_id in _SKIP_IN_STATIC_MODE:
             gates_skipped.append({"gate_id": check_id, "reason": "skipped_in_static_mode"})
             continue
@@ -544,8 +613,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 2
 
     workers = max(1, int(getattr(args, "workers", 1) or 1))
+    disabled_gates = _load_project_disabled_gates(project_dir)
+    if disabled_gates:
+        print(f"      {len(disabled_gates)} gate(s) disabled by project (.cortex/disabled_gates.json)", file=sys.stderr)
     print(f"[3/3] Running gates ({'parallel x' + str(workers) if workers > 1 else 'sequential'})...", file=sys.stderr)
-    outcomes, gates_skipped = run_gates(ctx, gates_filter, workers=workers)
+    outcomes, gates_skipped = run_gates(ctx, gates_filter, workers=workers, disabled_gates=disabled_gates)
 
     from cortex_forensic.meta_findings import drain_meta_findings
     _probe_meta_integrity(project_dir)

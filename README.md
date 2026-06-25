@@ -229,6 +229,156 @@ behavior, not a miss.
 
 ---
 
+## Per-project configurability
+
+Three knobs let a project tune the forensic auditor without forking it:
+**disable noisy gates**, **raise the severity floor**, and **add your own gate**.
+
+### Disable specific gates — `.cortex/disabled_gates.json`
+
+Drop a `disabled_gates.json` into your project's `.cortex/` directory to switch
+off gates that are noisy for your codebase. `run_forensic_audit` auto-loads it
+from `<project_dir>/.cortex/disabled_gates.json`. Two accepted shapes:
+
+```jsonc
+// a bare list of gate check_ids …
+["broad_except", "duplication"]
+```
+```jsonc
+// … or an object with a "disabled" key
+{ "disabled": ["broad_except", "duplication"] }
+```
+
+A disabled gate never runs (produces no findings) and is reported in
+`meta["gates_skipped"]` with reason `"disabled_by_project"`:
+
+```python
+from cortex_forensic import run_forensic_audit
+
+res = run_forensic_audit("/path/to/project")
+# .cortex/disabled_gates.json contains ["broad_except"]
+assert {e["gate_id"] for e in res["meta"]["gates_skipped"]
+        if e["reason"] == "disabled_by_project"} == {"broad_except"}
+```
+
+Behavior:
+
+- The disable list takes precedence over every other resolution rule — a
+  disabled gate is always reported as `disabled_by_project`, even one that the
+  static-mode policy or a `gates=` filter would have skipped anyway.
+- **Missing or empty file → no-op.** Nothing is disabled; all gates run.
+- **Malformed file never raises.** A JSON-syntax error, an unreadable file, or a
+  wrong-typed payload is *logged-and-ignored* (narrow exception handling, no
+  bare `except`): the audit completes, nothing is disabled, and a
+  `meta.profile_load_failed` finding (HIGH/WARN) records the failure so the
+  silent-disable is fail-loud rather than swallowed.
+- `.cortex/` is git-ignored by default in this repo's audit policy, so the file
+  is a *local* opt-out unless you commit it deliberately.
+
+The same file is honored by the CLI (`python -m cortex_forensic.self_audit
+--project <dir>`).
+
+> Gate ids are the `check_id` values — run `python -m cortex_forensic.self_audit
+> --list-gates` to print the file-based gates, or read the `GATE_SPECS` table in
+> [`cortex_forensic/gate_packs/universal.py`](cortex_forensic/gate_packs/universal.py).
+> Note a *family* gate id (`broad_except`) and its sub-checks emitted under a
+> dotted child id (`broad_except.return_none`) are produced by the same runner;
+> disabling the family id (`broad_except`) stops that runner entirely. A
+> *separately registered* gate such as `broad_except.hidden_sentinel` has its
+> own id and must be disabled separately.
+
+### Raise the severity floor — `severity=`
+
+`run_forensic_audit(project_dir, *, severity="LOW")` filters the returned
+`findings` to those **at or above** the floor. Ordering is
+`LOW < MEDIUM < HIGH < CRITICAL` (case-insensitive); the default `"LOW"` returns
+everything.
+
+```python
+res = run_forensic_audit("/path/to/project", severity="HIGH")
+# res["findings"] contains only HIGH and CRITICAL findings.
+```
+
+The `meta.*` counters (`severity_counts`, `total_findings`, `category_counts`)
+are computed **before** the floor is applied, so they always reflect the full
+finding set; `meta["findings_after_severity_filter"]` records the post-filter
+count whenever a non-LOW floor is used. The process exit code is likewise driven
+by the unfiltered HIGH/CRITICAL counts.
+
+### Add your own gate
+
+There is **no plugin auto-discovery** — the gate set is the module-level
+`GATE_SPECS` tuple in
+[`cortex_forensic/gate_packs/universal.py`](cortex_forensic/gate_packs/universal.py),
+resolved once at import into `DEFAULT_GATE_CHECKS`
+([`gate_registry.py`](cortex_forensic/gate_registry.py)). Registering a gate
+means adding a spec to that tuple. The spec shape is a 3-tuple:
+
+```python
+(check_id, category, runner)
+#   │          │         └── Callable[[PostExecGateContext], GateCheckResult]
+#   │          └── a cortex_forensic._shared.GateCategory enum member
+#   └── str, the gate id (also the prefix for any dotted child ids it emits)
+```
+
+The **runner** takes the synthetic `PostExecGateContext` (its
+`ctx.file_snapshots` maps each touched file's normalized path → a
+`GateFileSnapshot` with `.text`, `.line_count`, `.exists`) and returns a
+`GateCheckResult`:
+
+```python
+from cortex_forensic._shared import (
+    GateCheckResult, GateFinding, GateCategory, GateSeverity,
+    GateImpact, EvidenceReference,
+)
+
+def run_no_print_checks(ctx) -> GateCheckResult:
+    findings = []
+    for path, snap in ctx.file_snapshots.items():
+        if not snap.exists or not path.endswith(".py"):
+            continue
+        for lineno, line in enumerate(snap.text.splitlines(), start=1):
+            if line.lstrip().startswith("print("):
+                findings.append(GateFinding(
+                    check_id="no_print",
+                    category=GateCategory.REPORTING,
+                    title="Stray print() in source",
+                    severity=GateSeverity.LOW,
+                    impact=GateImpact.WARN,
+                    summary=f"print() at {path}:{lineno}",
+                    recommendation="Use logging instead of print().",
+                    evidence=(EvidenceReference(
+                        kind="line", path=path, detail=f"L{lineno}", ok=False),),
+                    fingerprint=f"no_print:{path}:{lineno}",
+                ))
+    return GateCheckResult(
+        check_id="no_print", category=GateCategory.REPORTING,
+        findings=tuple(findings),
+    )
+```
+
+To wire it in (the supported path — edit the pack):
+
+1. Add `("no_print", GateCategory.REPORTING, run_no_print_checks)` to
+   `GATE_SPECS` in `gate_packs/universal.py`.
+2. Add `"no_print"` to the `_FILE_BASED_GATES` allowlist in
+   [`cortex_forensic/self_audit.py`](cortex_forensic/self_audit.py) — the static
+   auditor only runs gate ids in that set (anything else is reported as
+   `not_file_based` and skipped). A runtime-only gate would instead get a
+   `skip_in_static` flag in `GATE_FLAGS`.
+
+Each `GateFinding` is validated on construction: `confidence` must be in
+`[0.0, 1.0]`, and a non-`"applicable"` `applicability` requires a non-empty
+`applicability_reason` (see `GateFinding.__post_init__` in `_shared.py`).
+
+> If you must register a gate **without** editing the pack (e.g. a downstream
+> wrapper), `cortex_forensic.gate_registry.DEFAULT_GATE_CHECKS` is a plain tuple
+> you can extend before calling `run_gates`, and `run_gates(..., gates_filter=…)`
+> selects a subset — but a new id still has to be present in `_FILE_BASED_GATES`
+> to run in static mode, so editing the pack is the honest, complete path.
+
+---
+
 ## Running tests
 
 ```bash
