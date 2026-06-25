@@ -7,3 +7,6 @@ dist/
 build/
 .pytest_cache/
 *.egg
+
+# forensic/map self-audit cache
+.cortex/
