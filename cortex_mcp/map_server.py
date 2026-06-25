@@ -16,12 +16,28 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from cortex_mcp import _jobs
+from cortex_mcp import _paths
 from cortex_map_builder import run_map_build, load_repo_maps
 
 mcp = FastMCP("code-map")
 
 # ~80 k chars keeps well under the 25 k token MCP output limit.
 OUTPUT_CHAR_LIMIT = 80_000
+
+# Map list keys present in the serialisable maps dict.
+_MAP_TYPES = (
+    "structural",
+    "runtime",
+    "data_contract",
+    "authority",
+    "conflict",
+    "hotspot",
+    "refactor_boundary",
+    "findings",
+)
+
+# Per-map-type cap for entries shown in the compact summary view.
+_TOP_ENTRIES_CAP = 10
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +94,64 @@ def _paginate_json(data: Any, page: int, page_size_chars: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Summary builder (Feature 2 — summary-first map results)
+# ---------------------------------------------------------------------------
+
+def _compact_map_entry(entry: Any) -> dict:
+    """Project a map entry down to a few compact fields for the summary."""
+    if not isinstance(entry, dict):
+        return {"value": str(entry)}
+    compact: dict[str, Any] = {
+        "name": entry.get("name"),
+        "file": entry.get("file"),
+        "line": entry.get("line"),
+    }
+    # Keep one size-ish metric if the entry carries one (cheap signal, bounded).
+    for metric in ("size", "complexity", "score", "count"):
+        if metric in entry:
+            compact[metric] = entry[metric]
+            break
+    return compact
+
+
+def _build_map_summary(maps_data: dict) -> dict:
+    """Build a compact summary of serialised repo maps.
+
+    Args:
+        maps_data: Output of ``_repo_maps_to_serialisable`` (a dict with one
+                   list per map type).
+
+    Returns:
+        A dict with ``by_map_type`` (per-type counts), ``top_entries``
+        (up to ``_TOP_ENTRIES_CAP`` compact entries per non-empty type),
+        ``schema_version``, ``missing`` and a ``hint``.
+    """
+    by_map_type: dict[str, int] = {}
+    top_entries: dict[str, list[dict]] = {}
+    for map_type in _MAP_TYPES:
+        entries = maps_data.get(map_type) or []
+        by_map_type[map_type] = len(entries)
+        if entries:
+            top_entries[map_type] = [
+                _compact_map_entry(e) for e in entries[:_TOP_ENTRIES_CAP]
+            ]
+
+    hint = (
+        "Compact map summary. For all entries of one map call "
+        "get_code_map_results with map='<type>' (e.g. 'structural'), or "
+        "view='full' for every map. Paging via page=."
+    )
+
+    return {
+        "missing": bool(maps_data.get("missing", False)),
+        "schema_version": maps_data.get("schema_version", "unknown"),
+        "by_map_type": by_map_type,
+        "top_entries": top_entries,
+        "hint": hint,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Internal: path-preserving wrapper around run_map_build
 # ---------------------------------------------------------------------------
 
@@ -94,19 +168,32 @@ def _run_map_build_with_path(path: str, map: str = "all") -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def start_code_map(path: str, map: str = "all") -> dict:
+def start_code_map(path: str = "", map: str = "all") -> dict:
     """Start a background code-map build job for the given project path.
 
     Args:
-        path: Absolute path to the project root directory.
+        path: Absolute path to the project root directory.  When empty/omitted
+              the project root is auto-detected by walking up from the current
+              working directory for a ``.git`` / ``pyproject.toml`` /
+              ``package.json`` marker (falling back to cwd).  The chosen
+              directory is returned as ``resolved_path``.
         map:  Map type to build — "all" (default) or a specific map name
               recognised by cortex_map_builder (e.g. "structural").
 
     Returns:
-        {"job_id": str | None, "status": "running" | "busy", ...}
+        {"job_id": str | None, "status": "running" | "busy",
+         "resolved_path": str, ...}
         When status is "busy" the server is at max concurrent jobs; retry later.
     """
-    return _jobs.start(_run_map_build_with_path, path, map=map)
+    # Auto-target: resolve only when no explicit path was given.
+    if path:
+        resolved_path = path
+    else:
+        resolved_path = _paths._resolve_project_root(None)
+
+    started = _jobs.start(_run_map_build_with_path, resolved_path, map=map)
+    started["resolved_path"] = resolved_path
+    return started
 
 
 @mcp.tool()
@@ -125,22 +212,31 @@ def get_code_map_status(job_id: str) -> dict:
 @mcp.tool()
 def get_code_map_results(
     job_id: str,
+    view: str = "summary",
+    map: str = "",
     page: int = 0,
     page_size_chars: int = OUTPUT_CHAR_LIMIT,
 ) -> dict:
-    """Retrieve results of a completed code-map build (paginated).
+    """Retrieve results of a completed code-map build.
 
-    Loads maps written to disk by run_map_build and returns them as
-    structured data. Large payloads are paginated to stay within MCP limits.
+    Three modes (loads maps written to disk by run_map_build):
+      * ``view='summary'`` (default) — per-map-type counts + the top entries
+        per map.  Compact; fits the MCP context budget.  Use this first.
+      * ``map='<type>'`` — every entry of a single map (e.g. 'structural'),
+        paginated.  Takes precedence over ``view``.
+      * ``view='full'`` — every entry of every map, paginated.
 
     Args:
         job_id:          Job ID returned by start_code_map.
+        view:            "summary" (default) or "full".
+        map:             A single map type to return in full (e.g.
+                         "structural").  Empty = honour ``view``.
         page:            Zero-based page index (each page ≈ page_size_chars chars).
         page_size_chars: Max chars per page (default 80 000 ≈ 25 k tokens).
 
     Returns:
-        dict with "job_id", "status", "exit_code", "payload" (JSON string),
-        "truncated" (bool), "total_chars", "page", "total_pages".
+        dict with "job_id", "status", "view", "exit_code", "payload"
+        (JSON string), "truncated" (bool), "total_chars", "page", "total_pages".
     """
     r = _jobs.result(job_id)
     status = r.get("status")
@@ -173,12 +269,30 @@ def get_code_map_results(
         except Exception as exc:
             maps_data = {"error": str(exc)}
     else:
-        maps_data = {"note": "path unavailable; use load_code_map_by_path"}
+        # _repo_maps_to_serialisable is monkeypatchable; call it so tests that
+        # patch it can inject fake maps even when no path is available.
+        maps_data = _repo_maps_to_serialisable(None)
 
-    full_data = {"exit_code": exit_code, "maps": maps_data}
+    # Decide the projection of maps_data based on map / view.
+    effective_view = "summary"
+    if map and map != "all":
+        # Single-map view: only the requested map type's entries.
+        rendered_maps: dict = {map: maps_data.get(map, [])}
+        effective_view = f"map:{map}"
+    elif view == "full":
+        rendered_maps = maps_data
+        effective_view = "full"
+    else:
+        rendered_maps = _build_map_summary(maps_data)
+        effective_view = "summary"
+
+    full_data = {"exit_code": exit_code, "maps": rendered_maps}
     page_data = _paginate_json(full_data, page=page, page_size_chars=page_size_chars)
 
-    return {"job_id": job_id, "status": "done", "exit_code": exit_code, **page_data}
+    return {
+        "job_id": job_id, "status": "done", "view": effective_view,
+        "exit_code": exit_code, **page_data,
+    }
 
 
 @mcp.tool()
