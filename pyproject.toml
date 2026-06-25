@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cortex-map-builder"
+name = "cortex-codeintel"
 version = "0.1.0"
-description = "Standalone structural map builder extracted from the Vigil/AI_Host_DOCR app"
+description = "Multi-language code intelligence: structural mapper, forensic gate auditor, and two FastMCP stdio servers"
 requires-python = ">=3.10"
 dependencies = [
     "tree-sitter>=0.25,<0.26",
