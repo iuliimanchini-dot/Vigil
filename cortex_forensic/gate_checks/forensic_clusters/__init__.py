@@ -16,19 +16,13 @@ from __future__ import annotations
 
 # -- core --
 from .core import (
-    CapabilityDeclaration,
     ProofRequirement,
-    ProbeResult,
     detect_language,
-    assess_declared_capabilities,
     assess_success_proof,
     assess_source_truthfulness,
     assess_config_applied,
-    assess_rendered_vs_live,
     assess_state_consistency,
     assess_fallback_transparency,
-    assess_surface_reachability,
-    assess_phantom_capability,
 )
 
 # -- edit_mutation --
@@ -125,9 +119,7 @@ from .legacy_debt import (
 
 __all__ = [
     # core types
-    "CapabilityDeclaration",
     "ProofRequirement",
-    "ProbeResult",
     "DeadCodeItem",
     "AllowlistEntry",
     # utility
@@ -137,16 +129,12 @@ __all__ = [
     "revalidate_allowlist",
     "save_allowlist",
     "filter_by_allowlist",
-    # assess functions — integrity clusters 1-9
-    "assess_declared_capabilities",
+    # assess functions — universal integrity clusters (2,3,4,6,7)
     "assess_success_proof",
     "assess_source_truthfulness",
     "assess_config_applied",
-    "assess_rendered_vs_live",
     "assess_state_consistency",
     "assess_fallback_transparency",
-    "assess_surface_reachability",
-    "assess_phantom_capability",
     # assess functions — edit/mutation/static clusters 10-17
     "assess_edit_consistency",
     "assess_mutation_verified",
