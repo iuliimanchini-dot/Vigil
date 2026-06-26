@@ -24,10 +24,15 @@ from ..common import (
     build_finding,
     collect_constant_container_literal_lines,
     collect_main_block_line_ranges,
+    has_allowlist_for,
     is_cli_surface_file,
     line_in_ranges,
 )
-from .._ast_helpers import collect_string_constant_line_ranges
+from .._ast_helpers import (
+    collect_cli_output_func_line_ranges,
+    collect_print_call_line_nums,
+    collect_string_constant_line_ranges,
+)
 import logging
 _log = logging.getLogger(__name__)
 
@@ -232,16 +237,51 @@ def assess_debug_prints(
     # ``_TEXTUAL_STDOUT_SINKS = ("print(", "console.log(", ...)`` so the
     # gate doesn't self-match on its own pattern definitions.
     container_lines: frozenset[int] = frozenset()
+    # FP-precision fix (debug_print_scan):
+    #   * ``print_call_lines`` — 1-based lines of GENUINE ``print(...)`` AST
+    #     calls. For Python this is the authoritative signal: a ``print(``
+    #     substring inside a string literal or an attribute call
+    #     (``obj.print(...)``) is NOT in this set, so it is never flagged.
+    #   * ``cli_output_ranges`` — body ranges of user-facing output functions
+    #     (``print_*`` / ``_print_*`` / ``main`` / ``cli`` …) where ``print()``
+    #     is intentional. Robust to package layout, unlike the hard-coded path
+    #     allowlist in ``is_cli_surface_file`` (which only knew the pre-migration
+    #     ``BRAIN/autoforensics/self_audit.py`` path).
+    print_call_lines: frozenset[int] = frozenset()
+    cli_output_ranges: list[tuple[int, int]] = []
+    python_ast_ok = True
     if lang == "python":
         main_ranges = collect_main_block_line_ranges(content)
         string_literal_lines = collect_string_constant_line_ranges(content)
         container_lines = collect_constant_container_literal_lines(content)
+        print_call_lines = collect_print_call_line_nums(content)
+        cli_output_ranges = collect_cli_output_func_line_ranges(content)
+        # If the source does not parse, every AST helper returns empty. We must
+        # not silently emit zero findings on a real (broken) file, so detect
+        # that case and fall back to a statement-position regex below.
+        try:
+            import ast as _ast
+            _ast.parse(content)
+        except (SyntaxError, ValueError):
+            python_ast_ok = False
+
+    def _line_has_noqa(line_text: str, lineno: int) -> bool:
+        # Respect per-line suppression: ``# noqa: debug_print_scan`` (handled by
+        # has_allowlist_for, incl. same/previous line) and a *bare* ``# noqa``.
+        if has_allowlist_for(content, "debug_print_scan", lineno):
+            return True
+        stripped_comment = line_text.split("#", 1)[1].strip().lower() if "#" in line_text else ""
+        # bare ``# noqa`` (no ``: check_id``) suppresses everything on the line.
+        return stripped_comment == "noqa" or stripped_comment.startswith("noqa ")
 
     findings: list[GateFinding] = []
 
     for i, line in enumerate(content.splitlines(), 1):
         stripped = line.strip()
         if stripped.startswith("#") or stripped.startswith("//") or stripped.startswith("*"):
+            continue
+        # All languages: respect inline ``# noqa`` suppression.
+        if _line_has_noqa(line, i):
             continue
         if lang == "python":
             if '__name__' in stripped and '__main__' in stripped:
@@ -252,12 +292,29 @@ def assess_debug_prints(
             # AST ranges.
             if main_ranges and line_in_ranges(i, main_ranges):
                 continue
+            # FP-precision fix: skip prints inside user-facing output funcs
+            # (``print_*`` / ``_print_*`` / ``main`` / ``cli`` …).
+            if cli_output_ranges and line_in_ranges(i, cli_output_ranges):
+                continue
             # F14c extra: skip lines inside multi-line string constants.
             if i in string_literal_lines:
                 continue
             # F14c sub-fix 1: skip UPPER_CASE container literal lines.
             if i in container_lines:
                 continue
+            # FP-precision fix (authoritative): when the file parses, only a
+            # line carrying a genuine ``print(...)`` AST call may be flagged.
+            # This rejects ``print(`` inside string literals and attribute
+            # calls. On a non-parsing file we fall back to requiring the
+            # stripped line to START with the call (statement position), so a
+            # ``print(`` buried mid-line (e.g. inside a literal) is still not
+            # flagged.
+            if python_ast_ok:
+                if i not in print_call_lines:
+                    continue
+            else:
+                if not re.match(r'print\s*\(', stripped):
+                    continue
 
         for pat in patterns:
             if re.search(pat, stripped):

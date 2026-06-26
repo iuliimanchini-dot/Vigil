@@ -135,6 +135,8 @@ __all__ = [
     "collect_string_constant_line_ranges",
     "line_is_inside_string_constant",
     "collect_constant_container_literal_lines",
+    "collect_print_call_line_nums",
+    "collect_cli_output_func_line_ranges",
     "is_section_header_comment",
     "is_cli_surface_file",
     "collect_main_block_line_ranges",
@@ -438,6 +440,82 @@ def collect_constant_container_literal_lines(source: str) -> frozenset[int]:
             continue
 
     return frozenset(out)
+
+
+def collect_print_call_line_nums(source: str) -> frozenset[int]:
+    """Return 1-based line numbers of genuine Python ``print(...)`` CALLS.
+
+    Precision fix for ``debug_print_scan``: a substring/regex match on
+    ``print(`` also fires on the token inside a *string literal* (e.g. a
+    detector pattern tuple ``(... "print(", ...)``) and on attribute calls
+    such as ``self.printer.print(...)``. Walking the AST and keeping only
+    ``ast.Call`` nodes whose ``func`` is the bare builtin ``Name(id='print')``
+    eliminates both classes of false positive.
+
+    The reported line number is the line of the ``print`` name token
+    (``func.lineno`` when available, else ``call.lineno``) so a multi-line
+    call is attributed to its opening line — matching how the gate reports.
+
+    Syntax-invalid sources return an empty frozenset (fail-open: no AST means
+    the caller keeps its prior regex behavior for that file).
+    """
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return frozenset()
+
+    out: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        # Only the bare builtin ``print`` — NOT ``obj.print`` / ``mod.print``.
+        if isinstance(func, ast.Name) and func.id == "print":
+            lineno = getattr(func, "lineno", None) or getattr(node, "lineno", None)
+            if lineno:
+                out.add(int(lineno))
+    return frozenset(out)
+
+
+def collect_cli_output_func_line_ranges(source: str) -> list[tuple[int, int]]:
+    """Return inclusive 1-based ``(start, end)`` line ranges for functions that
+    are conventionally user-facing CLI/output surfaces, where ``print()`` is
+    intentional rather than a stray debug statement.
+
+    Conservative name rule (documented intentionally narrow):
+      * name starts with ``print_`` or ``_print_`` (e.g. ``print_human_summary``,
+        ``_print_reports``), OR
+      * name is one of the canonical CLI entrypoints in ``_CLI_FUNC_NAMES``
+        (``main`` / ``cli`` / ``run`` / ``cli_main`` and underscore variants).
+
+    Only the *named* function's own body range is returned; a ``print_*``
+    function elsewhere in the file therefore does NOT silence a stray
+    ``print()`` in an unrelated normal function.
+
+    Syntax-invalid sources return an empty list (fail-open).
+    """
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return []
+
+    ranges: list[tuple[int, int]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        name = node.name
+        is_output_func = (
+            name.startswith("print_")
+            or name.startswith("_print_")
+            or name in _CLI_FUNC_NAMES
+        )
+        if not is_output_func:
+            continue
+        start = int(getattr(node, "lineno", 0) or 0)
+        end = int(getattr(node, "end_lineno", start) or start)
+        if start > 0:
+            ranges.append((start, end))
+    return ranges
 
 
 def is_section_header_comment(line: str) -> bool:

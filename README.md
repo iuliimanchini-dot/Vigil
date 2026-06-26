@@ -392,6 +392,28 @@ items 6–7 in [`tests/test_dup_and_sqli.py`](tests/test_dup_and_sqli.py)):
    stored on a variable first is **not** detected. Non-Python languages get the
    regex security patterns only (no SQLi AST rule). This is deliberately
    low-false-positive, not full SQLi coverage.
+8. **`debug_print_scan` substring / CLI-output false positives.** The detector
+   matched the substring `print(` anywhere on a line, so it fired on (a) `print(`
+   *inside a string literal* (e.g. a detector's own pattern tuple
+   `(..., "print(", ...)`), (b) lines already carrying `# noqa: debug_print_scan`,
+   and (c) intentional user-facing `print()` in CLI/output functions (the path
+   allowlist only knew the pre-migration `BRAIN/autoforensics/self_audit.py` path,
+   not the packaged `self_audit.py`). For **Python** the gate is now AST-driven:
+   only a line carrying a genuine `print(...)` **call** (`ast.Call` with
+   `func=Name('print')`) can be flagged — a `print(` in a string literal or an
+   attribute call (`obj.print(...)`) is never flagged. On a file that fails to
+   parse it falls back to requiring the stripped line to **start** with `print(`
+   (statement position). Across all languages the gate now (i) respects
+   `# noqa: debug_print_scan` and a bare `# noqa` on the offending line, and
+   (ii) skips prints inside conventionally-named output functions — name starts
+   with `print_`/`_print_`, or is `main`/`cli`/`run`/`cli_main` (and underscore
+   variants). The rule is deliberately conservative: a `print_*` function
+   elsewhere in the file does **not** silence a stray `print()` in an unrelated
+   normal function, and a genuine `print("DEBUG", x)` in ordinary code is still
+   flagged. On `cortex_forensic` itself this cut `debug_print_scan` **12 → 0**
+   (all 12 were FPs: 10 in `print_human_summary()`, 2 in detector pattern
+   tuples); the corpus oracle (`tests/oracle/sample_quality.py:63`) stays flagged.
+   TDD'd in [`tests/test_debug_print_fp.py`](tests/test_debug_print_fp.py).
 
 **Residual honesty.** The remaining output is dominated by the objective
 `size.*` gates (real breaches of published linter limits) and
