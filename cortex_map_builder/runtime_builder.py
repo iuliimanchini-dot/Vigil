@@ -257,6 +257,10 @@ def build_runtime_map_static(
                 existing["side_effects"] = list(
                     set(existing["side_effects"]) | set(raw["side_effects"])
                 )
+                # Preserve entry-function call targets (order-stable union).
+                for c in raw.get("calls", ()):
+                    if c not in existing["calls"]:
+                        existing["calls"].append(c)
             else:
                 auto_raw[name] = {
                     "node": name,
@@ -264,6 +268,7 @@ def build_runtime_map_static(
                     "tags": list(raw["tags"]),
                     "env_vars": list(raw["env_vars"]),
                     "side_effects": list(raw["side_effects"]),
+                    "calls": list(raw.get("calls", ())),
                     "evidence": raw["evidence"],
                     "defined_in": name.split(":")[0] if ":" in name else name,
                 }
@@ -282,7 +287,7 @@ def build_runtime_map_static(
             node=name,
             defined_in=raw["defined_in"],
             kind=raw["kind"],
-            calls=(),
+            calls=tuple(raw.get("calls", ())),
             side_effects=tuple(sorted(set(raw["side_effects"]))),
             depends_on_env=tuple(sorted(set(raw["env_vars"]))),
             order_constraints=(),

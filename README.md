@@ -42,6 +42,20 @@ Providing a seed switches to the structured behaviour: domains carry `target_fil
 
 Known limitation: write sites whose target is unresolvable and which use idioms outside the detected set — notably the atomic-write trio `os.fdopen(fd, "w")` + `fh.write(...)` + `os.replace(tmp, str(path))` — are not detected, so a file that *only* writes that way (e.g. `cortex_map_builder/map_storage.py`) will not surface. This is a discovery-layer limitation, independent of the seed behaviour.
 
+### Runtime map surfaces entrypoints out-of-the-box (no seed required)
+
+The runtime map (`cortex_map_builder/runtime_builder.py`) surfaces real entrypoints on any project **without configuration**. With **no** `<project>/.cortex/map_seeds/runtime_seed.json`, the Python AST scanner (`_runtime_ast._RuntimeVisitor`) emits inferred `RuntimeNode` entries (`status="inferred"`, `source="static_scan"`, evidence pointing at `file:line`) for:
+
+- `if __name__ == "__main__":` blocks (`kind="main_entrypoint"`); the invoked entry functions are recorded in `calls`;
+- the module-level function(s) invoked from that block (`kind="entry_function"`);
+- async entrypoints (`asyncio.run(...)` in a `__main__` block) — tagged `async_entrypoint`.
+
+Adapter-provided runtime signals (Go `init`/goroutine, Java static-block/Spring/thread, JS timer/listener/top-level effect) already surface without a seed via `collect_adapter_runtime_nodes`; this change adds the Python `__main__`/entry-function path that was previously missing.
+
+Precision guard: an ordinary helper function or a plain import is **not** an entrypoint. A `def main(): ...` *without* a `__main__` guard is just a function and does **not** produce a `main_entrypoint` node. Providing a seed keeps the existing behaviour — seed nodes are `status="canonical"` and win on name conflicts, so the same node is never double-surfaced; auto-discovered nodes augment the seed.
+
+Known limitation: entrypoints exposed only via packaging (`console_scripts` / `[project.scripts]`) without an in-file `__main__` guard — e.g. `cortex_map_builder/cli_entry.py` — are not surfaced by the static scan (there is no in-source signal to key on). Background tasks/routes are detected only inside init-style function bodies (`__init__`/`bootstrap`/`setup`/`startup`/`start`/`initialize`/`init`), per the existing visitor scope.
+
 ---
 
 ## Install
