@@ -235,12 +235,52 @@ def _py_pct_format_is_sql(node: ast.BinOp) -> bool:
     return bool(_SQL_STRUCTURE_RE.search(literal))
 
 
+def _flatten_add_chain(node: ast.AST) -> list[ast.AST]:
+    """Flatten a left-associative ``a + b + c`` chain into ``[a, b, c]``.
+
+    Only ``+`` (``ast.Add``) is unrolled; any other node is returned as a single
+    leaf. Used to inspect every operand of a string-concatenation query.
+    """
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _flatten_add_chain(node.left) + _flatten_add_chain(node.right)
+    return [node]
+
+
+def _py_concat_is_sql(node: ast.BinOp) -> bool:
+    """True if ``"<sql literal>" + <var> [+ ...]`` builds a query with a variable.
+
+    SQL-injection via string concatenation. Fires only when the ``+`` chain
+    BOTH (a) contains a string literal with real SQL-clause structure and
+    (b) has at least one NON-literal operand (a variable / call / attribute the
+    caller interpolates in). A constant ``"SELECT ... " + "WHERE ..."`` (all
+    literals) is a static query and must NOT fire — no injection vector.
+    """
+    if not isinstance(node.op, ast.Add):
+        return False
+    operands = _flatten_add_chain(node)
+    literal_parts: list[str] = []
+    has_non_literal = False
+    for operand in operands:
+        if isinstance(operand, ast.Constant) and isinstance(operand.value, str):
+            literal_parts.append(operand.value)
+        else:
+            has_non_literal = True
+    if not has_non_literal:
+        return False  # constant string concatenation — not dynamic
+    combined = "".join(literal_parts)
+    if len(combined) < _MIN_SQL_QUERY_LEN:
+        return False
+    return bool(_SQL_STRUCTURE_RE.search(combined))
+
+
 def _detect_python_sql_injection(tree: ast.AST) -> list[tuple[int, str]]:
     """Return ``(lineno, description)`` for dynamic SQL passed to DB-call sites.
 
     AST-level: only fires when a dynamically-built literal is the first argument
     of ``.execute / .executemany / .executescript / .query / .raw`` AND the
-    literal template has real SQL-clause structure (not just a keyword).
+    literal template has real SQL-clause structure (not just a keyword). Covers
+    f-string, ``.format()``, ``%``-format, and ``+`` string concatenation with
+    an interpolated variable.
     """
     hits: list[tuple[int, str]] = []
     for node in ast.walk(tree):
@@ -260,6 +300,8 @@ def _detect_python_sql_injection(tree: ast.AST) -> list[tuple[int, str]]:
             hits.append((lineno, ".format() SQL query -- SQL injection risk"))
         elif isinstance(first, ast.BinOp) and _py_pct_format_is_sql(first):
             hits.append((lineno, "%-format SQL query -- use parameterized queries"))
+        elif isinstance(first, ast.BinOp) and _py_concat_is_sql(first):
+            hits.append((lineno, "concatenated SQL query -- SQL injection risk"))
     return hits
 
 

@@ -320,8 +320,9 @@ The two `filelock` findings that remain are both honest: one `size.file_warn`
 (`_soft_rw/_sync.py` is genuinely 858 lines > 750) and one informational
 `meta.git_unavailable` (see below). Zero false claims about the code.
 
-Five fixes landed (each TDD'd in
-[`tests/test_forensic_fp_clean_code.py`](tests/test_forensic_fp_clean_code.py)):
+Fixes landed (each TDD'd; items 1–5 in
+[`tests/test_forensic_fp_clean_code.py`](tests/test_forensic_fp_clean_code.py),
+items 6–7 in [`tests/test_dup_and_sqli.py`](tests/test_dup_and_sqli.py)):
 
 1. **`broad_except` cleanup-then-reraise.** `except BaseException: <cleanup>;
    raise` (filelock `_api.py:513`, `asyncio.py:268`) is the correct cancel-
@@ -361,6 +362,36 @@ Five fixes landed (each TDD'd in
    (`self_audit._load_gate_profile_if_present`) now falls back to the package's
    **own shipped** `gate_profile.json` (resolved relative to the package, at the
    repo root) as the last resort. A target-local profile still wins.
+6. **`duplicate_scan` (near-duplicate code) per-line inflation.** The
+   intra-file near-duplicate detector (`assess_near_duplicate_code`) hashes a
+   sliding 4-line window, so one duplicated region of N lines emitted N−3
+   near-identical findings ("block at lines 118 and 201", "119 and 202", …).
+   On `filelock` this produced **39** `duplicate_scan` findings for only a
+   handful of real blocks. Adjacent/overlapping window-pairs are now **merged**
+   into ONE finding per contiguous block (same region-grouping idea as
+   `duplication.text_block`'s `_merge_starts`), reported as a line range:
+   `Near-duplicate block at lines 118-126 ↔ 201-209 (9 lines)`. filelock drops
+   **39 → 13** — a true merge, not a cap: genuinely separate duplicate blocks
+   still each report once (verified: `_api.py` `__call__`/`__init__` signature
+   mirror at `118-126 ↔ 201-209` is preserved as a single finding).
+7. **Focused SQL-injection detection (cluster 12, `security_scan`).** For
+   Python, `assess_security_patterns` flags a dynamic query passed to a
+   DB-call site (`.execute`/`.executemany`/`.executescript`/`.query`/`.raw`)
+   when the query is built by **f-string** interpolation, **`%`-format**,
+   **`str.format()`**, or **`+` string concatenation** with at least one
+   non-literal (variable) operand. The flagged string must have real SQL-clause
+   structure (`SELECT … FROM`, `UPDATE … SET`, `DELETE FROM`, …) and meet a
+   minimum length, so a SQL keyword in prose/log lines does not trip it. A plain
+   literal `execute("SELECT 1")`, a parametrised `execute("… ?", (x,))`, and a
+   constant concat of two literals (`"SELECT … " + "WHERE …"`) are **not**
+   flagged.
+   **Limits (honest):** detection is purely local/syntactic — it fires only
+   when the dynamic string is the *direct first argument* of the DB call.
+   There is **no taint tracking**: a query assembled in a prior statement
+   (`q = "SELECT … " + user_input; db.execute(q)`), passed through a helper, or
+   stored on a variable first is **not** detected. Non-Python languages get the
+   regex security patterns only (no SQLi AST rule). This is deliberately
+   low-false-positive, not full SQLi coverage.
 
 **Residual honesty.** The remaining output is dominated by the objective
 `size.*` gates (real breaches of published linter limits) and

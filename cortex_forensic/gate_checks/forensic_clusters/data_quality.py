@@ -134,7 +134,17 @@ def assess_near_duplicate_code(
     file_path: str,
     content: str,
 ) -> list[GateFinding]:
-    """Cluster 45: Detect near-duplicate code blocks within the same file."""
+    """Cluster 45: Detect near-duplicate code blocks within the same file.
+
+    A single duplicated REGION of N lines spans N-BLOCK_SIZE+1 overlapping
+    sliding windows. Emitting one finding per window inflated the count (a
+    4-statement block reported once per line: "lines 118 and 201", "119 and
+    202", ...). We collect every duplicate window-pair, then MERGE contiguous /
+    overlapping pairs into ONE finding per contiguous block — mirroring the
+    region-grouping ``_merge_starts`` used by ``duplication.text_block`` — so a
+    block reports as "lines 118-121 <-> 201-204" exactly once. Genuinely
+    separate duplicate blocks still each report once (merge, not cap).
+    """
     if not content.strip():
         return []
 
@@ -159,31 +169,77 @@ def assess_near_duplicate_code(
     if len(normalized) < BLOCK_SIZE * 2:
         return []
 
-    seen: dict[str, int] = {}
-    findings: list[GateFinding] = []
-
+    # Pass 1: collect every duplicate window as a (first_occurrence, this) pair
+    # of the *normalized* index, keeping the source line number for each.
+    seen: dict[str, tuple[int, int]] = {}  # fingerprint -> (norm_idx, line_no)
+    # raw_pairs: list of (orig_norm_idx, dup_norm_idx, orig_line, dup_line)
+    raw_pairs: list[tuple[int, int, int, int]] = []
     for idx in range(len(normalized) - BLOCK_SIZE + 1):
         block = tuple(normalized[idx + k][0] for k in range(BLOCK_SIZE))
         fp = "\n".join(block)
         first_line = normalized[idx][1]
-
         if fp in seen:
-            if abs(first_line - seen[fp]) >= BLOCK_SIZE:
-                detail = f"Near-duplicate block at lines {seen[fp]} and {first_line} ({BLOCK_SIZE} lines)"
-                findings.append(build_finding(
-                    check_id="duplicate_scan",
-                    category=GateCategory.DRIFT,
-                    title=f"[near_duplicate_code] {file_path}:{first_line}",
-                    severity=GateSeverity.LOW,
-                    impact=GateImpact.WARN,
-                    summary=detail,
-                    recommendation="Extract the duplicate block into a shared function.",
-                    evidence=(EvidenceReference(kind="probe", path=file_path, detail=detail, ok=False),),
-                    repair_kind=RepairKind.REMOVE_DUPLICATE.value,
-                    executor_action=f"Deduplicate code block at {file_path}:{first_line}",
-                ))
+            orig_idx, orig_line = seen[fp]
+            if abs(first_line - orig_line) >= BLOCK_SIZE:
+                raw_pairs.append((orig_idx, idx, orig_line, first_line))
         else:
-            seen[fp] = first_line
+            seen[fp] = (idx, first_line)
+
+    if not raw_pairs:
+        return []
+
+    # Pass 2: merge contiguous/overlapping window-pairs into block-level
+    # regions. Two pairs belong to the same duplicated block when BOTH their
+    # original-window index and duplicate-window index advance by exactly one
+    # step together (the sliding window moved one normalized line on each side).
+    # Each merged region records the source line span on both sides.
+    raw_pairs.sort()
+    regions: list[tuple[int, int, int, int]] = []  # (orig_start_line, orig_end_line, dup_start_line, dup_end_line)
+    cur_orig_idx, cur_dup_idx, cur_orig_start, cur_dup_start = raw_pairs[0]
+    cur_orig_end_line = cur_orig_start
+    cur_dup_end_line = cur_dup_start
+    prev_orig_idx, prev_dup_idx = cur_orig_idx, cur_dup_idx
+
+    def _flush() -> None:
+        # End line of a BLOCK_SIZE window starting at the recorded start line:
+        # add the height of the window (last normalized line in the window).
+        oi = prev_orig_idx
+        di = prev_dup_idx
+        orig_end = normalized[oi + BLOCK_SIZE - 1][1]
+        dup_end = normalized[di + BLOCK_SIZE - 1][1]
+        regions.append((cur_orig_start, orig_end, cur_dup_start, dup_end))
+
+    for orig_idx, dup_idx, orig_line, dup_line in raw_pairs[1:]:
+        if orig_idx == prev_orig_idx + 1 and dup_idx == prev_dup_idx + 1:
+            # Same sliding region — extend.
+            prev_orig_idx, prev_dup_idx = orig_idx, dup_idx
+            continue
+        # New region — flush the current one and start fresh.
+        _flush()
+        cur_orig_idx, cur_dup_idx = orig_idx, dup_idx
+        cur_orig_start, cur_dup_start = orig_line, dup_line
+        prev_orig_idx, prev_dup_idx = orig_idx, dup_idx
+    _flush()
+
+    findings: list[GateFinding] = []
+    for orig_start, orig_end, dup_start, dup_end in regions:
+        n_lines = orig_end - orig_start + 1
+        detail = (
+            f"Near-duplicate block at lines {orig_start}-{orig_end} ↔ "
+            f"{dup_start}-{dup_end} ({n_lines} lines)"
+        )
+        findings.append(build_finding(
+            check_id="duplicate_scan",
+            category=GateCategory.DRIFT,
+            title=f"[near_duplicate_code] {file_path}:{dup_start}",
+            severity=GateSeverity.LOW,
+            impact=GateImpact.WARN,
+            summary=detail,
+            recommendation="Extract the duplicate block into a shared function.",
+            evidence=(EvidenceReference(kind="probe", path=file_path, detail=detail, ok=False),),
+            repair_kind=RepairKind.REMOVE_DUPLICATE.value,
+            executor_action=f"Deduplicate code block at {file_path}:{dup_start}",
+        ))
         if len(findings) >= 10:
             break
 
