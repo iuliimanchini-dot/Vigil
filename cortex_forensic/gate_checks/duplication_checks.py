@@ -99,6 +99,12 @@ def run_duplication_checks(ctx: PostExecGateContext):
     # known snapshots — at least 10 files so genuine 2-20 file incremental
     # changes are never mis-classified as full scans).
     _MIN_FULL_SCAN_FILES = 10
+    # cross_touched_duplicate is for INCREMENTAL diffs (2-20 touched files). A
+    # full scan clears the touched hashes so it does not DOUBLE-COUNT
+    # duplicate_scan (C45), which already covers the duplication. Full scan =
+    # explicit ctx.is_full_scan flag (standalone self-audit sets it), OR the
+    # heuristic "touched covers all snapshots and >= _MIN_FULL_SCAN_FILES".
+    # Incremental scans (no flag, small touched set) keep cross_touched active.
     _is_full_scan = getattr(ctx, "is_full_scan", False) or (
         len(ctx.touched_files) >= _MIN_FULL_SCAN_FILES
         and set(ctx.touched_files) >= set(ctx.file_snapshots.keys())

@@ -303,6 +303,9 @@ class PostExecGateContext:
     changed_files_reported: tuple[str, ...] = field(default_factory=tuple)
     changed_files_observed: tuple[str, ...] = field(default_factory=tuple)
     touched_files: tuple[str, ...] = field(default_factory=tuple)
+    # True = full-project scan (standalone self-audit): clears cross_touched_duplicate
+    # so it does not double-count duplicate_scan. False = incremental diff (default).
+    is_full_scan: bool = False
     artifact_refs: dict[str, str] = field(default_factory=dict)
     prior_findings: tuple[str, ...] = field(default_factory=tuple)
     tests_touched: tuple[str, ...] = field(default_factory=tuple)

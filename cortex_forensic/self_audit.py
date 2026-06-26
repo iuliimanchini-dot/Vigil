@@ -370,6 +370,7 @@ def build_synthetic_context(project_dir: Path, source_files: list[str]) -> PostE
         gate_round=1,
         touched_files=tuple(source_files),
         changed_files_observed=tuple(source_files),
+        is_full_scan=True,  # standalone audit is always a full scan, not an incremental diff
         source_package_roots=detect_source_package_roots(project_dir),
         file_snapshots=file_snapshots,
         repo_profile=repo_profile,
