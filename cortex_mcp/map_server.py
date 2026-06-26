@@ -122,17 +122,31 @@ def _paginate_json(data: Any, page: int, page_size_chars: int) -> dict:
 # ---------------------------------------------------------------------------
 
 def _compact_map_entry(entry: Any) -> dict:
-    """Project a map entry down to a few compact fields for the summary."""
+    """Project a map entry down to a few compact fields for the summary.
+
+    Map types use different field names for an entry's identity:
+    structural->file, data_contract->entity, hotspot->target, runtime->node,
+    conflict->subject, findings->title, refactor_boundary->boundary_id. Pull the
+    first present so the summary is MEANINGFUL for every map (not all-null).
+    """
     if not isinstance(entry, dict):
         return {"value": str(entry)}
-    compact: dict[str, Any] = {
-        "name": entry.get("name"),
-        "file": entry.get("file"),
-        "line": entry.get("line"),
-    }
-    # Keep one size-ish metric if the entry carries one (cheap signal, bounded).
-    for metric in ("size", "complexity", "score", "count"):
-        if metric in entry:
+    name = (
+        entry.get("name") or entry.get("entity") or entry.get("target")
+        or entry.get("node") or entry.get("subject") or entry.get("title")
+        or entry.get("boundary_id") or entry.get("conflict_id")
+        or entry.get("finding_id")
+    )
+    file = (
+        entry.get("file") or entry.get("defined_in")
+        or entry.get("canonical_schema") or entry.get("path")
+    )
+    compact: dict[str, Any] = {"name": name, "file": file}
+    if entry.get("line") is not None:
+        compact["line"] = entry.get("line")
+    # One signal metric if present (varies by map type).
+    for metric in ("hotspot_score", "severity", "size", "complexity", "score", "count"):
+        if entry.get(metric) is not None:
             compact[metric] = entry[metric]
             break
     return compact
