@@ -15,7 +15,7 @@ _IMPORT_CONTINUATION_RE = re.compile(r"^[A-Za-z_]\w*,?$")
 
 # Pure parameter-declaration / call-argument continuation lines, e.g.
 #   ``timeout: float = 0.05,``  ``poll_interval=poll_interval,``  ``arg0=None,``
-# A long signature or call mirrored across sync↔async APIs is structure, not
+# A long signature or call mirrored across sync/async APIs is structure, not
 # copy-pasted logic — exclude these lines from the text-block window so the
 # detector does not fire on shared parameter lists.
 _PARAM_DECL_RE = re.compile(
@@ -28,7 +28,7 @@ def _string_literal_lines(text: str) -> frozenset[int]:
 
     Covers docstrings and any multi-line string constant. Used to exclude
     docstring / long-string content from the text-block duplication window:
-    shared docstrings (e.g. identical ``:param`` blocks on sync↔async API
+    shared docstrings (e.g. identical ``:param`` blocks on sync/async API
     mirrors) are documentation, not duplicated CODE.
 
     Python only. Returns an empty set on SyntaxError (fail-open) — non-Python
@@ -223,7 +223,7 @@ def run_duplication_checks(ctx: PostExecGateContext):
             continue
         lines = snapshot.text.splitlines()
         # Lines that sit inside a string literal (docstrings, long multi-line
-        # strings). Shared docstrings / :param blocks across sync↔async API
+        # strings). Shared docstrings / :param blocks across sync/async API
         # mirrors are documentation, not duplicated CODE — exclude them.
         docstring_lines = (
             _string_literal_lines(snapshot.text)

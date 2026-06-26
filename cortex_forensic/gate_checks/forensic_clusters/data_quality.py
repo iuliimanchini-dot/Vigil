@@ -225,7 +225,7 @@ def assess_near_duplicate_code(
     for orig_start, orig_end, dup_start, dup_end in regions:
         n_lines = orig_end - orig_start + 1
         detail = (
-            f"Near-duplicate block at lines {orig_start}-{orig_end} ↔ "
+            f"Near-duplicate block at lines {orig_start}-{orig_end} <-> "
             f"{dup_start}-{dup_end} ({n_lines} lines)"
         )
         findings.append(build_finding(
