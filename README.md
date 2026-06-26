@@ -32,6 +32,16 @@ The table below reflects the actual `supports_*` flags and implementation state 
 
 **Forensic gates:** language-aware; runs on all five languages where applicable. The gate framework uses `cortex_map_builder` sources internally.
 
+> **Note on the Python row.** "Authority writes — stubs return `[]`" refers to the *adapter* (`PythonAdapter.extract_writer_calls`). Real Python write detection lives in `authority_builder.py` (stdlib `ast`): `.write_text` / `.write_bytes` / `.save` / `os.replace`, plus `open(..., "w"/"a"/"x"/"+")` and `json.dump(...)`. Reads (`open(p)` / `open(p, "r")` / `.read_text()` / `json.load` / `json.dumps`) are not writes.
+
+### Authority map works out-of-the-box (no seed required)
+
+The authority map (`cortex_map_builder/authority_builder.py`) is useful on any project **without configuration**. With **no** `<project>/.cortex/map_seeds/authority_domains.json`, every discovered write site is auto-surfaced as an *inferred* per-writer `AuthorityDomain` (`status="inferred"`, `source="static_scan"`, modest confidence). Each entry names the writer file (`canonical_owner`) and lists its resolved write targets + operation kinds, so the map is immediately actionable. A pure read never produces an entry.
+
+Providing a seed switches to the structured behaviour: domains carry `target_file_patterns`, writers are attributed by AST-resolved target match, and seed entries are `status="observed"`. With a seed present, the per-writer auto-surfacing is **not** added (no double-surfacing).
+
+Known limitation: write sites whose target is unresolvable and which use idioms outside the detected set — notably the atomic-write trio `os.fdopen(fd, "w")` + `fh.write(...)` + `os.replace(tmp, str(path))` — are not detected, so a file that *only* writes that way (e.g. `cortex_map_builder/map_storage.py`) will not surface. This is a discovery-layer limitation, independent of the seed behaviour.
+
 ---
 
 ## Install

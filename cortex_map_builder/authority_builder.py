@@ -2,12 +2,22 @@
 
 Generic tool: operates on any target project_dir.
 Seed file: <project_dir>/.cortex/map_seeds/authority_domains.json
-Missing seed -> empty map (valid state, not an error).
 
-Per-domain filtering: each domain seed entry may carry ``target_file_patterns``
-(glob patterns). A writer is attributed to a domain only when at least one
-resolved write-target path matches a pattern. Writers with unresolvable targets
-are dropped from all domains. Empty/missing patterns -> no auto-discovery.
+WITH a seed: each domain seed entry may carry ``target_file_patterns`` (glob
+patterns). A writer is attributed to a domain only when at least one resolved
+write-target path matches a pattern. Writers with unresolvable targets are
+dropped from all domains. Empty/missing patterns -> no per-domain discovery.
+
+WITHOUT a seed (out-of-box): every discovered write site is auto-surfaced as an
+inferred per-writer ``AuthorityDomain`` (status="inferred", source="static_scan")
+so the map is useful immediately. Each entry names the writer file plus its
+write targets and operation kinds. Pure reads never produce an entry.
+
+Write detection (Python AST): ``.write_text`` / ``.write_bytes`` / ``.save`` /
+``os.replace`` (method writes) and ``open(..., "w"/"a"/"x"/"+")`` / ``json.dump``
+(function writes). Reads -- ``open(p)`` / ``open(p, "r")`` / ``.read_text()`` /
+``json.load`` / ``json.dumps`` -- are NOT writes. Non-Python writers (Go/Java/
+JS/TS) are detected via adapter ``extract_writer_calls`` and surface the same way.
 """
 from __future__ import annotations
 
@@ -34,6 +44,17 @@ _log = logging.getLogger(__name__)
 _SEED_FILENAME = "authority_domains.json"
 _WRITE_METHOD_NAMES = frozenset({"write_text", "write_bytes", "save"})
 _UNKNOWN_TARGET = "__unknown_target__"
+
+
+def _open_mode_is_write(mode: str) -> bool:
+    """True iff an open() mode string mutates the target.
+
+    Write modes contain 'w', 'a', 'x' (create/truncate/append) or '+'
+    (read-update / write-update — both can write). A bare ``open(p)`` defaults
+    to ``"r"``; ``"r"`` / ``"rb"`` / ``"rt"`` are pure READS → not writes.
+    The ``b``/``t`` flags are binary/text modifiers and do not imply a write.
+    """
+    return any(ch in mode for ch in ("w", "a", "x", "+"))
 
 # Provenance type constants for path tracking
 _PROVENANCE_PATH_CONSTRUCTOR = "path_constructor"  # Path(...), PurePath(...), etc.
@@ -219,6 +240,93 @@ def _resolve_call_target(
     return None
 
 
+def _resolve_func_arg_target(
+    arg_node: ast.expr | None,
+    assignments: dict[str, str],
+    aliases: dict[str, str],
+) -> str | None:
+    """Resolve a path-like target from a positional call argument.
+
+    Handles a string literal, ``Path("literal")``, or a variable name that an
+    assignment resolved to a string/Path (with alias chaining). Returns None
+    when the target cannot be resolved.
+    """
+    if arg_node is None:
+        return None
+    # "literal"
+    lit = _extract_string_value(arg_node)
+    if lit is not None:
+        return lit
+    # Path("literal") / PurePath("literal")
+    if isinstance(arg_node, ast.Call) and isinstance(arg_node.func, (ast.Name, ast.Attribute)):
+        fname = arg_node.func.id if isinstance(arg_node.func, ast.Name) else arg_node.func.attr
+        if fname in ("Path", "PurePath", "PosixPath", "WindowsPath") and arg_node.args:
+            return _extract_string_value(arg_node.args[0])
+    # variable name -> resolve through aliases + assignments
+    if isinstance(arg_node, ast.Name):
+        resolved = arg_node.id
+        visited: set[str] = {resolved}
+        for _ in range(8):
+            nxt = aliases.get(resolved)
+            if nxt is None or nxt in visited:
+                break
+            visited.add(nxt)
+            resolved = nxt
+        return assignments.get(resolved)
+    return None
+
+
+def _detect_func_write(
+    node: ast.Call,
+    assignments: dict[str, str],
+    aliases: dict[str, str],
+) -> tuple[str, str | None] | None:
+    """Detect ``open(path, "w")`` and ``json.dump(obj, fp)`` function-call writes.
+
+    These are plain function calls (``ast.Name`` / module ``ast.Attribute``),
+    NOT receiver-method calls, so the standard ``_WRITE_METHOD_NAMES`` scan
+    misses them. Returns ``(operation, target_or_None)`` for a write, else None.
+
+    - ``open(path, mode)`` is a write only when ``mode`` mutates the target
+      (see :func:`_open_mode_is_write`). A bare ``open(p)`` / ``open(p, "r")``
+      is a READ → returns None (precision guard).
+    - ``json.dump(obj, fp)`` writes to ``fp``; ``json.dumps`` (returns a string)
+      and ``json.load`` / ``json.loads`` (reads) are NOT writes.
+    """
+    func = node.func
+
+    # open(...) — builtin name (assume builtin; shadowing is rare and out of scope)
+    if isinstance(func, ast.Name) and func.id == "open":
+        mode = "r"  # open() default
+        if len(node.args) >= 2:
+            lit = _extract_string_value(node.args[1])
+            if lit is not None:
+                mode = lit
+        else:
+            for kw in node.keywords:
+                if kw.arg == "mode":
+                    lit = _extract_string_value(kw.value)
+                    if lit is not None:
+                        mode = lit
+        if not _open_mode_is_write(mode):
+            return None
+        target = _resolve_func_arg_target(
+            node.args[0] if node.args else None, assignments, aliases
+        )
+        return ("open_write", target)
+
+    # json.dump(obj, fp, ...) — module attribute call. Target = fp (2nd arg),
+    # best-effort (usually a file handle variable). dumps/load/loads excluded.
+    if isinstance(func, ast.Attribute) and func.attr == "dump":
+        receiver = func.value
+        if isinstance(receiver, ast.Name) and receiver.id == "json":
+            fp_node = node.args[1] if len(node.args) >= 2 else None
+            target = _resolve_func_arg_target(fp_node, assignments, aliases)
+            return ("json_dump", target)
+
+    return None
+
+
 def _collect_assignments(tree: ast.AST) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
     """Return (assignments_typed, aliases).
 
@@ -296,10 +404,28 @@ def _scan_write_calls(
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        if not isinstance(node.func, ast.Attribute):
-            continue
 
         line_no = node.lineno if hasattr(node, 'lineno') else None
+
+        # Function-call writes: open(path, "w"), json.dump(obj, fp).
+        # These are NOT receiver-method calls, so handle them before the
+        # ast.Attribute gate below. Reads (open(p)/open(p,"r")) return None.
+        func_write = _detect_func_write(node, assignments, aliases)
+        if func_write is not None:
+            operation, resolved = func_write
+            if resolved is not None and not _is_plausible_path(resolved):
+                resolved = _UNKNOWN_TARGET
+            target = resolved if resolved is not None else _UNKNOWN_TARGET
+            provenance = _PROVENANCE_UNKNOWN
+            for var_name, (path, prov_type) in assignments_typed.items():
+                if path == target and target != _UNKNOWN_TARGET:
+                    provenance = prov_type
+                    break
+            calls.append(WriteCall(target=target, operation=operation, line=line_no, provenance=provenance))
+            continue
+
+        if not isinstance(node.func, ast.Attribute):
+            continue
 
         # Standard write methods: path.write_text(), path.save(), etc.
         if node.func.attr in _WRITE_METHOD_NAMES:
@@ -375,17 +501,29 @@ def _scan_writers(
         except (OSError, SyntaxError) as exc:
             _log.debug("_scan_writers: skipping %s: %s", py_file, exc)
             return None
-        has_write = any(
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and (node.func.attr in _WRITE_METHOD_NAMES or (
-                node.func.attr == "replace"
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "os"
-            ))
-            for node in ast.walk(tree)
-        )
-        if not has_write:
+        # Cheap pre-filter: skip files with no candidate write-shaped call.
+        # Method writes (.write_text/.save/os.replace) are ast.Attribute; the
+        # function-call writes open(...) / json.dump(...) are ast.Name / module
+        # attribute respectively. Mode/target precision is decided later in
+        # _scan_write_calls — this is only a coarse "worth parsing?" gate.
+        def _is_candidate(node: ast.AST) -> bool:
+            if not isinstance(node, ast.Call):
+                return False
+            func = node.func
+            if isinstance(func, ast.Name):
+                return func.id == "open"  # mode filtered later
+            if isinstance(func, ast.Attribute):
+                if func.attr in _WRITE_METHOD_NAMES:
+                    return True
+                if func.attr == "dump" and isinstance(func.value, ast.Name) and func.value.id == "json":
+                    return True
+                if (func.attr == "replace"
+                        and isinstance(func.value, ast.Name)
+                        and func.value.id == "os"):
+                    return True
+            return False
+
+        if not any(_is_candidate(node) for node in ast.walk(tree)):
             return None
         assignments_typed, aliases = _collect_assignments(tree)
         write_calls = _scan_write_calls(tree, assignments_typed, aliases)
@@ -585,6 +723,100 @@ def _auto_discover_domains(
     return auto_domains
 
 
+def _safe_writer_domain_name(writer_rel: str) -> str:
+    """Stable, filesystem-safe domain name for a writer file (no-seed mode)."""
+    digest = hashlib.blake2s(writer_rel.encode("utf-8"), digest_size=2).hexdigest()
+    stem = Path(writer_rel).stem
+    raw = "%s_%s" % (stem, digest)
+    return "auto_discovered:" + re.sub(r"[^a-zA-Z0-9_]", "_", raw)[:48]
+
+
+def _build_no_seed_writer_domains(
+    writers_map: dict[str, list[WriteCall]],
+    adapter_candidates: dict[str, list[AuthorityWriteCandidate]],
+) -> list[AuthorityDomain]:
+    """Auto-surface every discovered writer as an inferred AuthorityDomain.
+
+    Used ONLY when no seed file exists. One domain per writer file: the writer
+    is named as canonical_owner and listed in writers_detected together with
+    each resolved write target + operation/kind, so the entry is actionable
+    out-of-the-box. status="inferred", source names "static_scan".
+
+    Writers with no resolvable targets are still surfaced (with an unknown
+    target) because a confirmed write operation is itself authority evidence;
+    pure reads never reach this map (they produce no WriteCall / candidate).
+    """
+    metadata = make_metadata(source="static_scan", confidence=0.5, status="inferred")
+    domains: list[AuthorityDomain] = []
+
+    # union of all writer files (Python AST + non-Python adapter), sorted
+    all_writers = sorted(set(writers_map) | set(adapter_candidates))
+
+    for writer_rel in all_writers:
+        writers_detected: list[dict] = []
+        targets: list[str] = []
+
+        # Python AST write calls
+        for wc in writers_map.get(writer_rel, []):
+            target = wc.target if wc.target != _UNKNOWN_TARGET else ""
+            if target:
+                targets.append(_normalize_target_path(target))
+            writers_detected.append({
+                "location": writer_rel,
+                "kind": "write",
+                "target": _normalize_target_path(target) if target else "",
+                "operation": wc.operation,
+                "line": wc.line,
+                "provenance": wc.provenance,
+                "file_role": classify_file_role(writer_rel),
+            })
+
+        # Non-Python adapter candidates (Go/Java/JS/TS)
+        for cand in adapter_candidates.get(writer_rel, []):
+            target = cand.target_hint or ""
+            if target:
+                targets.append(_normalize_target_path(target))
+            writers_detected.append({
+                "location": writer_rel,
+                "kind": cand.write_kind,
+                "target": _normalize_target_path(target) if target else "",
+                "operation": cand.write_kind,
+                "line": cand.line,
+                "provenance": _PROVENANCE_UNKNOWN,
+                "file_role": classify_file_role(writer_rel),
+            })
+
+        if not writers_detected:
+            continue
+
+        # Deterministic order inside the entry
+        writers_detected.sort(key=lambda w: (w.get("line") or 0, w.get("target", ""), w.get("operation", "")))
+        resolved_targets = sorted(dict.fromkeys(t for t in targets if t))
+
+        domains.append(AuthorityDomain(
+            authority_domain=_safe_writer_domain_name(writer_rel),
+            canonical_owner=writer_rel,
+            allowed_writers=(writer_rel,),
+            derived_readers=(),
+            cache_layers=(),
+            freshness_sla="immediate",
+            invalidation_rule="unknown",
+            drift_policy="observe",
+            writers_detected=tuple(
+                json.dumps(w, sort_keys=True) for w in writers_detected
+            ),
+            last_drift_events=(),
+            target_file_patterns=tuple(resolved_targets),
+            source=metadata["source"],
+            evidence=tuple(metadata["evidence"]),
+            confidence=metadata["confidence"],
+            freshness=metadata["freshness"],
+            status=metadata["status"],
+        ))
+
+    return domains
+
+
 # ---------------------------------------------------------------------------
 # Non-Python adapter writer collection (L7a)
 # ---------------------------------------------------------------------------
@@ -654,7 +886,11 @@ def build_authority_map(
     Also performs seed-free auto-discovery: detects shared write targets
     (2+ writers from different module prefixes) and creates inferred domains.
 
-    Returns empty list if no seed file exists and no shared write targets found.
+    When NO seed file exists, additionally auto-surfaces every discovered write
+    site as an inferred per-writer domain (out-of-box usefulness). With a seed
+    present this step is skipped to preserve the structured behaviour.
+
+    Returns empty list only if no seed file exists AND no write sites were found.
     Raises MapIntegrityError if seed is corrupt or has incompatible version.
     """
     project_dir = Path(project_dir).resolve()
@@ -665,6 +901,7 @@ def build_authority_map(
     if parse_cache is not None:
         _log.debug("build_authority_map: parse_cache provided but not used in threaded _scan_writers")
     domains_raw = _load_seed(project_dir)
+    no_seed = domains_raw is None  # no seed file at all -> auto-surface mode
     seed_list: list[dict] = domains_raw or []
 
     # ALWAYS scan writers (not gated behind seed anymore)
@@ -844,8 +1081,22 @@ def build_authority_map(
             ad["authority_domain"], ad["_shared_target"], len(ad["_all_writers"]),
         )
 
+    # --- No-seed auto-surface (out-of-box) ---
+    # When NO seed file exists, the per-domain loop above never runs and the
+    # shared-write heuristic only catches multi-writer targets, so most projects
+    # got an empty authority map. Surface every discovered writer (Python +
+    # adapter) as an inferred per-writer domain so the map is useful immediately.
+    # When a seed exists we keep the structured behaviour and do NOT add these
+    # (avoids double-surfacing writers already attributed to seed domains).
+    no_seed_count = 0
+    if no_seed:
+        no_seed_domains = _build_no_seed_writer_domains(writers_map, adapter_candidates)
+        results.extend(no_seed_domains)
+        no_seed_count = len(no_seed_domains)
+
     _log.info(
-        "build_authority_map: completed %d domain(s) (seed=%d auto=%d), %d writer file(s) scanned",
-        len(results), len([r for r in results if r.status == "observed"]), len(auto_domains), len(writers_map),
+        "build_authority_map: completed %d domain(s) (seed=%d auto=%d no_seed=%d), %d writer file(s) scanned",
+        len(results), len([r for r in results if r.status == "observed"]),
+        len(auto_domains), no_seed_count, len(writers_map),
     )
     return results
