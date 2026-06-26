@@ -19,7 +19,31 @@ from cortex_mcp import _jobs
 from cortex_mcp import _paths
 from cortex_map_builder import run_map_build, load_repo_maps
 
-mcp = FastMCP("code-map")
+_INSTRUCTIONS = """\
+code-map - builds structural maps of a codebase across Python/Go/Java/JS/TS:
+imports/dependencies, defined symbols, runtime entry points, data contracts,
+authority/write sites, risk hotspots, and refactor boundaries. Static analysis
+(tree-sitter/AST) - it never runs the project.
+
+WHEN TO USE: when the user wants to understand an unfamiliar codebase's architecture,
+find what imports/depends on what, locate runtime entry points or risk hotspots, or
+scope a refactor. Not a code-quality auditor (use forensic-audit for bugs/smells).
+
+WORKFLOW (background job + poll):
+  1. start_code_map(path="", map="all") -> leave path empty to auto-detect the project
+     root from the current directory; returns {job_id, resolved_path}.
+  2. get_code_map_status(job_id)         -> poll until status == "done".
+  3. get_code_map_results(job_id)        -> COMPACT SUMMARY by default (per-map-type
+     counts + top entries). Read this FIRST; it fits the context budget.
+  4. Drill in: get_code_map_results(job_id, map="structural") for one full map type,
+     or view="full" for every map (both paginated via page=).
+  Also: load_code_map_by_path(path) re-reads maps built in an earlier session (no job).
+
+NOTE: output is summary-first to stay within the context budget; maps are cached on
+disk under <project>/.cortex/ so re-runs are cheap.
+"""
+
+mcp = FastMCP("code-map", instructions=_INSTRUCTIONS)
 
 # ~80 k chars keeps well under the 25 k token MCP output limit.
 OUTPUT_CHAR_LIMIT = 80_000
@@ -60,7 +84,7 @@ def _repo_maps_to_serialisable(repo_maps: Any) -> dict:
     if getattr(repo_maps, "missing", False):
         return {
             "missing": True,
-            "note": "maps directory not found — run start_code_map first",
+            "note": "maps directory not found - run start_code_map first",
         }
     return {
         "missing": False,
@@ -94,7 +118,7 @@ def _paginate_json(data: Any, page: int, page_size_chars: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Summary builder (Feature 2 — summary-first map results)
+# Summary builder (Feature 2 - summary-first map results)
 # ---------------------------------------------------------------------------
 
 def _compact_map_entry(entry: Any) -> dict:
@@ -177,7 +201,7 @@ def start_code_map(path: str = "", map: str = "all") -> dict:
               working directory for a ``.git`` / ``pyproject.toml`` /
               ``package.json`` marker (falling back to cwd).  The chosen
               directory is returned as ``resolved_path``.
-        map:  Map type to build — "all" (default) or a specific map name
+        map:  Map type to build - "all" (default) or a specific map name
               recognised by cortex_map_builder (e.g. "structural").
 
     Returns:
@@ -224,11 +248,11 @@ def get_code_map_results(
     """Retrieve results of a completed code-map build.
 
     Three modes (loads maps written to disk by run_map_build):
-      * ``view='summary'`` (default) — per-map-type counts + the top entries
+      * ``view='summary'`` (default) - per-map-type counts + the top entries
         per map.  Compact; fits the MCP context budget.  Use this first.
-      * ``map='<type>'`` — every entry of a single map (e.g. 'structural'),
+      * ``map='<type>'`` - every entry of a single map (e.g. 'structural'),
         paginated.  Takes precedence over ``view``.
-      * ``view='full'`` — every entry of every map, paginated.
+      * ``view='full'`` - every entry of every map, paginated.
 
     Args:
         job_id:          Job ID returned by start_code_map.

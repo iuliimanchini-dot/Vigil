@@ -20,7 +20,36 @@ from cortex_mcp import _jobs
 from cortex_mcp import _paths
 from cortex_forensic import run_forensic_audit
 
-mcp = FastMCP("forensic-audit")
+_INSTRUCTIONS = """\
+forensic-audit - static code-quality forensic auditor. Finds real bugs, swallowed
+exceptions, security issues, oversized/over-nested code, and cross-file duplication
+across Python/Go/Java/JS/TS. Pure static analysis (tree-sitter/AST) - it never runs
+the project or its tests.
+
+WHEN TO USE: when the user asks to audit a project, review code quality, or find
+problems/bugs/smells in a codebase or a set of changes - before committing or merging.
+Not for running tests (it doesn't execute code).
+
+WORKFLOW (background job + poll - do not expect an instant answer):
+  1. start_forensic_audit(path="")  -> leave path empty to auto-detect the project
+     root from the current directory; returns {job_id, resolved_path}.
+  2. get_forensic_status(job_id)     -> poll until status == "done" (usually seconds).
+  3. get_forensic_results(job_id)    -> returns a COMPACT SUMMARY by default
+     (counts by severity + by check_id + top findings). Read this FIRST; it is sized
+     to fit the context budget (~3k tokens), so prefer it over the full list.
+  4. Only if needed: get_forensic_results(job_id, view="full", severity="HIGH")
+     or check_id="..." to drill into specific findings (paginated).
+
+INTERPRETING: exit_code 0 = clean, 1 = high/critical findings exist, 2 = error.
+Triage HIGH first. On clean third-party code most findings are size.* (large files)
+and broad_except (real `except: pass` swallows).
+
+REDUCING NOISE: create <project>/.cortex/disabled_gates.json = ["gate_id", ...] to
+skip gates for that project. Some heuristic gates (e.g. god_object_zones) are OFF by
+default and run only when explicitly named via the gates= argument.
+"""
+
+mcp = FastMCP("forensic-audit", instructions=_INSTRUCTIONS)
 
 # ~80 k chars keeps well under the 25 k token MCP output limit.
 OUTPUT_CHAR_LIMIT = 80_000
@@ -34,7 +63,7 @@ _BY_CHECK_ID_CAP = 25
 
 
 # ---------------------------------------------------------------------------
-# Summary builder (Feature 1 — summary-first forensic results)
+# Summary builder (Feature 1 - summary-first forensic results)
 # ---------------------------------------------------------------------------
 
 def _finding_location(f: dict) -> tuple[Any, Any]:
@@ -215,7 +244,7 @@ def start_forensic_audit(
     Returns:
         {"job_id": str | None, "status": "running" | "busy",
          "resolved_path": str, ...}
-        When status is "busy", retry later — the server is at max concurrent jobs.
+        When status is "busy", retry later - the server is at max concurrent jobs.
 
     Resource note:
         run_forensic_audit always uses workers=1 internally. This server
@@ -272,10 +301,10 @@ def get_forensic_results(
     """Retrieve results of a completed forensic audit.
 
     Two views:
-      * ``view='summary'`` (default) — a compact summary (total counts,
+      * ``view='summary'`` (default) - a compact summary (total counts,
         by_severity, by_check_id, top HIGH findings) that fits comfortably
         in the MCP context budget.  Use this first.
-      * ``view='full'`` — the full findings list, capped and paginated.
+      * ``view='full'`` - the full findings list, capped and paginated.
         Supports ``severity=`` and ``check_id=`` filters to drill in.
 
     Args:
@@ -293,7 +322,7 @@ def get_forensic_results(
         dict with keys:
           "job_id", "status", "view",
           "exit_code" (0=clean, 1=high/critical findings, 2=error),
-          "payload" (JSON string — summary dict or full result),
+          "payload" (JSON string - summary dict or full result),
           "truncated" (bool), "total_chars", "page", "total_pages".
     """
     r = _jobs.result(job_id)
