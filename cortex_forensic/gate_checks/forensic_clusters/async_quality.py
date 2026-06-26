@@ -34,6 +34,7 @@ from .._ast_helpers import (
     collect_string_constant_line_ranges,
 )
 import logging
+import re
 _log = logging.getLogger(__name__)
 
 
@@ -390,6 +391,114 @@ _AUDIT_TRAIL_MARKERS: tuple[str, ...] = (
 _COMMENTED_CODE_LONG_BLOCK_THRESHOLD = 10
 
 
+# ---------------------------------------------------------------------------
+# F9e: prose-vs-commented-code discrimination.
+#
+# The old decision ("ANY 2 lines whose body matches a permissive code_indicators
+# regex") flagged explanatory PROSE that merely *mentions* a code keyword in an
+# English sentence (e.g. "... a line-only regex cannot tell a swallow from the
+# correct ``except BaseException: <cleanup>; raise`` idiom."). That produced a
+# verified false positive at broad_except_checks.py:21.
+#
+# A de-commented comment block is treated as REAL commented-out code only when:
+#   (Python) a contiguous run of >= 2 of its body lines ``ast.parse``-s as valid
+#            Python statements (a prose intro line that does not parse is simply
+#            trimmed away — the oracle block "legacy impl ...:\n for v in ...:"
+#            is still caught via its inner code run), OR
+#   (any language, fallback) the block carries >= 2 *distinct strong* code
+#            signals: an assignment with an identifier LHS, a def/class/import/
+#            func/const/let/var header, a bare ``name(...)`` call statement, or a
+#            block-header line (``if ...:``/``for ...:``/``} {``).
+#
+# A single keyword embedded in grammatical English is NOT a strong signal, so
+# prose does not reach the >= 2 bar.
+# ---------------------------------------------------------------------------
+
+# Strong, structural code signals (used for every language; the AST path is the
+# primary signal for Python). Each regex anchors at the START of the (stripped)
+# body so a keyword mid-sentence does not match.
+_STRONG_ASSIGN_RE = re.compile(
+    r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*|\[[^\]]*\])*\s*(?:[-+*/%|&^@]|//|\*\*|>>|<<)?=\s*\S'
+)
+_STRONG_DEFCLASS_RE = re.compile(
+    r'^(?:async\s+)?(?:def|class|import|from|func|public|private|protected|const|let|var)\s+\w'
+)
+_STRONG_CALL_RE = re.compile(r'^[A-Za-z_][\w.]*\s*\([^)]*\)\s*;?\s*$')
+_STRONG_BLOCKHEAD_RE = re.compile(
+    r'^(?:if|elif|else|for|while|try|except|finally|with|switch|case|do)\b.*[:{]\s*$'
+    r'|^\}'
+)
+
+
+def _largest_parseable_python_run(bodies: list[str], min_run: int = 2) -> int:
+    """Return the length of the longest contiguous run of >= ``min_run`` body
+    lines that ``ast.parse``-s as valid Python (after dedent), else 0.
+
+    Trims leading/trailing prose: a real commented-out block preceded by a
+    one-line prose intro (which alone breaks parsing) is still recognised via
+    its inner code run.
+    """
+    import ast
+    import textwrap
+
+    n = len(bodies)
+    if n < min_run:
+        return 0
+    best = 0
+    for start in range(n):
+        # Longest window first for this start; stop at the first that parses.
+        for end in range(n, start + min_run - 1, -1):
+            if end - start < min_run:
+                continue
+            text = textwrap.dedent("\n".join(bodies[start:end]))
+            if not text.strip():
+                continue
+            try:
+                tree = ast.parse(text)
+            except (SyntaxError, ValueError):
+                continue
+            if tree.body:
+                if end - start > best:
+                    best = end - start
+                break
+    return best
+
+
+def _count_strong_code_signals(bodies: list[str]) -> int:
+    """Count DISTINCT strong structural code-signal kinds across the block.
+
+    Distinct kinds (not raw line count) so a single repeated construct does not
+    by itself clear the bar; >= 2 different kinds is strong evidence of code.
+    """
+    kinds: set[str] = set()
+    for raw in bodies:
+        s = raw.strip()
+        if not s:
+            continue
+        if _STRONG_DEFCLASS_RE.search(s):
+            kinds.add("defclass")
+        if _STRONG_ASSIGN_RE.search(s):
+            kinds.add("assign")
+        if _STRONG_CALL_RE.search(s):
+            kinds.add("call")
+        if _STRONG_BLOCKHEAD_RE.search(s):
+            kinds.add("blockhead")
+    return len(kinds)
+
+
+def _commented_block_is_code(bodies: list[str], lang: str) -> bool:
+    """True when a de-commented comment block is REAL commented-out code rather
+    than explanatory prose. See the F9e note above for the discrimination rule.
+    """
+    if lang == "python":
+        if _largest_parseable_python_run(bodies, min_run=2) >= 2:
+            return True
+    # Language-agnostic fallback (and a backstop for Python blocks that no longer
+    # parse standalone — e.g. a dangling continuation): >= 2 distinct strong
+    # structural signals.
+    return _count_strong_code_signals(bodies) >= 2
+
+
 def assess_commented_code(
     file_path: str,
     content: str,
@@ -488,18 +597,29 @@ def assess_commented_code(
         if m:
             block_start = i
             code_lines = 0
+            block_bodies: list[str] = []
             j = i
             while j < len(lines):
                 cm = comment_re.match(lines[j])
                 if not cm:
                     break
                 body = cm.group(1)
+                block_bodies.append(body)
                 if code_indicators.search(body):
                     code_lines += 1
                 j += 1
             block_len = j - block_start
 
-            if block_len >= 3 and code_lines >= 2:
+            # F9e: the permissive code_indicators count is a cheap PRE-FILTER
+            # only. A block is reported as commented-out code solely when the
+            # prose-vs-code discriminator (parseable Python run OR >= 2 distinct
+            # strong structural signals) confirms it — this rejects explanatory
+            # prose that merely mentions a code keyword in a sentence.
+            if (
+                block_len >= 3
+                and code_lines >= 2
+                and _commented_block_is_code(block_bodies, lang)
+            ):
                 if block_start < 4:
                     i = j
                     continue

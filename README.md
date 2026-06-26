@@ -438,6 +438,33 @@ items 6–7 in [`tests/test_dup_and_sqli.py`](tests/test_dup_and_sqli.py)):
    (all 12 were FPs: 10 in `print_human_summary()`, 2 in detector pattern
    tuples); the corpus oracle (`tests/oracle/sample_quality.py:63`) stays flagged.
    TDD'd in [`tests/test_debug_print_fp.py`](tests/test_debug_print_fp.py).
+9. **`commented_code_scan` prose false positives.** The detector grouped
+   consecutive comment lines and flagged a block when ≥2 of its lines matched a
+   permissive `code_indicators` regex (`\w=\w`, `def `, `return \w`, `for \w`,
+   `except \w`, …). Explanatory **prose** that merely *mentions* a code keyword in
+   an English sentence therefore tripped it — e.g. the design-rationale comment at
+   `broad_except_checks.py:21` ("… a line-only regex cannot tell a swallow from the
+   correct `except BaseException: <cleanup>; raise` idiom.") matched `except \w`
+   twice. The `code_indicators` count is now only a cheap **pre-filter**; a block is
+   reported as commented-out code solely when a prose-vs-code discriminator confirms
+   it. For **Python** that means a contiguous run of ≥2 of the de-commented body
+   lines **`ast.parse`-s** as valid statements (a leading prose intro line that
+   alone breaks parsing is trimmed, so a real block introduced by a sentence — like
+   the corpus oracle's `# legacy implementation kept around just in case:` followed
+   by a commented `for`/`return` body — is still caught via its inner code run).
+   For every language there is a fallback: ≥2 **distinct strong** structural signals
+   (an assignment with an identifier LHS, a `def`/`class`/`import`/`func`/`const`
+   header, a bare `name(...)` call statement, or a block-header line). A single
+   keyword inside grammatical English is not a strong signal, so prose does not reach
+   the bar. On `cortex_forensic` itself this cut `commented_code_scan` **22 → 0**
+   (all 22 were prose: design-rationale / FP-tightening notes that referenced code
+   in backticks — verified by inspecting each block); the corpus oracle
+   (`tests/oracle/sample_quality.py:69`, a genuine 5-line commented-out block) stays
+   flagged, so recall is preserved. **Honest limit:** discrimination is per-block and
+   purely syntactic — the AST path is Python-only, and a *non-Python* prose comment
+   that happens to start ≥2 lines with assignment/call/header shapes could still be
+   flagged; the "22 → 0" figure is measured on this repo, not a guarantee for all
+   codebases. TDD'd in [`tests/test_commented_code_fp.py`](tests/test_commented_code_fp.py).
 
 **Residual honesty.** The remaining output is dominated by the objective
 `size.*` gates (real breaches of published linter limits) and
