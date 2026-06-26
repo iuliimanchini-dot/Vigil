@@ -64,7 +64,12 @@ GATE_FLAGS: dict[str, frozenset[str]] = {
     "handoff":              frozenset({"skip_in_static"}),
     "artifact_completeness": frozenset({"skip_in_static"}),
     "semantic_intent":      frozenset({"skip_in_static"}),
-    "forensic_clusters":    frozenset({"skip_in_static"}),
+    # forensic_clusters is NOT skip_in_static: the pack runs in static mode but
+    # filters out its runtime-only sub-checks (see
+    # forensic_cluster_runners.core._RUNTIME_ONLY_CLUSTERS / _is_static_mode), so
+    # the static-safe checks (security, secrets, mutable defaults, resource
+    # leaks, dead code, hardcoded paths, …) still fire without runtime FPs.
+    "forensic_clusters":    frozenset(),
     "pipeline_chain":       frozenset({"skip_in_static"}),
     "testing":              frozenset({"skip_in_static"}),
     "fix_without_test":     frozenset({"skip_in_static"}),

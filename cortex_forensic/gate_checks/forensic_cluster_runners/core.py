@@ -73,6 +73,46 @@ _log = logging.getLogger(__name__)
 
 _FORENSIC_CLUSTERS_TIMEOUT = 90
 
+# Cluster runners that depend on RUNTIME / verification context (artifact_refs,
+# transport_mode, reported-vs-observed changes, validation-contract proofs, or a
+# disk re-read compared against an expected hash). They are meaningful ONLY when
+# the gate runs against a real post-execution context. In *static mode* — where
+# the context is synthesised from on-disk file_snapshots alone (no artifact_refs,
+# empty transport_mode, session_number == 0) — they either trivially self-skip OR
+# emit false positives, so they are filtered out entirely.
+#
+# The worst offender is cluster11_mutation_verified: the runner hashes the
+# *decoded* snapshot text (LF, BOM-stripped) while the assessor hashes the *raw*
+# disk bytes (CRLF / BOM on Windows). On any CRLF or BOM file those hashes differ
+# → a bogus "File content DIVERGED from expected" HIGH on otherwise-clean code.
+# That check exists to catch "edit applied in memory but not on disk" and has no
+# meaning when the snapshot WAS read from disk, as it is in static mode.
+_RUNTIME_ONLY_CLUSTERS: frozenset[str] = frozenset({
+    "cluster2_success_without_proof",          # needs session_number + artifact_refs
+    "cluster4_config_accepted_ignored_proofs",  # needs validation_contract proofs + artifact_refs
+    "cluster6_state_divergence",               # reported vs observed changed files
+    "cluster7_fallback_hides_truth",           # transport_mode + artifact_refs
+    "cluster3_proxy_as_truth",                 # transport_mode + artifact_refs
+    "cluster4_config_accepted_ignored_general",  # transport_mode / project_mode / task_intent
+    "cluster10_edit_consistency",              # operator_api runtime-edit consistency
+    "cluster11_mutation_verified",             # disk re-read vs expected hash → CRLF/BOM FP
+})
+
+
+def _is_static_mode(ctx: PostExecGateContext) -> bool:
+    """True when *ctx* carries no runtime/verification context.
+
+    Static mode is how ``run_forensic_audit`` invokes the pack: the context is
+    built from on-disk ``file_snapshots`` only (see
+    ``self_audit.build_synthetic_context``) with no ``artifact_refs``, empty
+    ``transport_mode`` and ``session_number == 0``. When a real post-execution
+    context is present (any of those populated) the full pack runs unchanged.
+    """
+    has_artifacts = bool(getattr(ctx, "artifact_refs", None))
+    has_transport = bool(getattr(ctx, "transport_mode", "") or "")
+    has_session = bool(getattr(ctx, "session_number", 0))
+    return not (has_artifacts or has_transport or has_session)
+
 
 def run_forensic_cluster_checks(ctx: PostExecGateContext) -> GateCheckResult:
     """Run universal forensic cluster checks against the real gate context.
@@ -162,6 +202,18 @@ def run_forensic_cluster_checks(ctx: PostExecGateContext) -> GateCheckResult:
             # Phase 13 runners (C53: legacy compatibility debt)
             ("cluster53_legacy_compat_debt", lambda: _check_legacy_compat_debt(ctx)),
         ]
+
+        # In static mode (no runtime/verification context) drop the runtime-only
+        # clusters so the static-safe subset (security, secrets, mutable defaults,
+        # resource leaks, dead code, …) still runs without emitting runtime FPs.
+        if _is_static_mode(ctx):
+            _dropped = [lbl for lbl, _ in _checks if lbl in _RUNTIME_ONLY_CLUSTERS]
+            _checks = [(lbl, fn) for lbl, fn in _checks if lbl not in _RUNTIME_ONLY_CLUSTERS]
+            if _dropped:
+                _log.debug(
+                    "forensic_clusters: static mode — skipped %d runtime-only "
+                    "cluster(s): %s", len(_dropped), ", ".join(_dropped),
+                )
 
         from cortex_forensic.self_audit import get_cancel_event
         for label, fn in _checks:

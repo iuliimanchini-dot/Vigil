@@ -519,6 +519,40 @@ Each `GateFinding` is validated on construction: `confidence` must be in
 > selects a subset — but a new id still has to be present in `_FILE_BASED_GATES`
 > to run in static mode, so editing the pack is the honest, complete path.
 
+### `forensic_clusters` in static mode (static-safe subset)
+
+The `forensic_clusters` pack bundles ~40 cluster runners. Most are purely
+static (they read only `file_snapshots` / text / AST): security patterns,
+secrets, mutable defaults, resource leaks, hardcoded paths, dead code,
+unreachable code, shadowed builtins, magic numbers, TODO debt, import cycles,
+exception swallowing, and more. A minority are **runtime-only** — they need a
+real post-execution context (`artifact_refs`, `transport_mode`,
+reported-vs-observed changed files, validation-contract proofs, or a disk
+re-read compared against an expected hash) and are meaningless / false-positive
+prone without it. The runtime-only set is listed in
+[`forensic_cluster_runners/core.py`](cortex_forensic/gate_checks/forensic_cluster_runners/core.py)
+as `_RUNTIME_ONLY_CLUSTERS` (`cluster2_success_without_proof`,
+`cluster3_proxy_as_truth`, `cluster4_config_accepted_ignored_*`,
+`cluster6_state_divergence`, `cluster7_fallback_hides_truth`,
+`cluster10_edit_consistency`, `cluster11_mutation_verified`).
+
+So the pack is **not** flagged `skip_in_static`. Instead, when `run_gates`
+hands it a synthetic static context (`_is_static_mode(ctx)` → no runtime
+signals), the runner filters the runtime-only clusters out and runs only the
+static-safe checks. When a real execution context is present the full pack runs
+unchanged. The worst FP this prevents is `cluster11_mutation_verified`: it
+hashes the *decoded* snapshot text but the assessor hashes the *raw* disk bytes,
+so every CRLF / BOM file would otherwise fire a bogus "content DIVERGED" HIGH.
+
+> **`dead_code_scan` caveat.** Cluster 20 marks a public function "dead" when it
+> is not referenced anywhere in the **scanned set**. `run_forensic_audit` always
+> discovers the whole project directory, so cross-file references resolve and it
+> is accurate (0 findings on `filelock`, which uses `__all__`). It can over-report
+> only on a *partial / single-file* scan, where a function's caller lives in a
+> file outside the scan — that path is not used by `run_forensic_audit`. Findings
+> are MEDIUM, and names in `__all__`, framework-decorated, or matching standalone
+> markers are already classified as `standalone_utility` and skipped.
+
 ---
 
 ## Running tests
