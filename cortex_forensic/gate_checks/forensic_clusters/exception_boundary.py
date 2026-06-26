@@ -141,6 +141,9 @@ def assess_hardcoded_paths(file_path: str, content: str) -> list[GateFinding]:
         (r'''["']/tmp/[^"']+["']''', "Hardcoded /tmp path (use tempfile)"),
         (r'''["']/usr/(?:local/|bin/)[^"']+["']''', "Hardcoded /usr path"),
         (r'''["']/var/(?:log|run|lib)/[^"']+["']''', "Hardcoded /var path"),
+        (r'''["']/etc/[^"']+["']''', "Hardcoded /etc config path"),
+        (r'''["']/opt/[^"']+["']''', "Hardcoded /opt path"),
+        (r'''["']/(?:root|srv|mnt)/[^"']+["']''', "Hardcoded system path"),
     ]
 
     findings: list[GateFinding] = []
