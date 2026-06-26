@@ -307,7 +307,14 @@ def _check_dead_code(ctx) -> list[GateFinding]:
 
     items: list[DeadCodeItem] = []
     for name, file_path, line, kind in definitions:
-        if name.startswith("_") or name.startswith("test_"):
+        # Skip dunders (framework hooks like __init__/__repr__, normally called
+        # implicitly) and test functions. Single-underscore private functions
+        # ARE candidates: classify_dead_code_item flags a private symbol only
+        # when it is unreferenced anywhere (a `self._x` method call sets
+        # is_referenced and is skipped), and a public unreferenced symbol is
+        # treated as possible external API (not flagged) -- so private+unref is
+        # the precise dead-code signal.
+        if name.startswith("__") or name.startswith("test_"):
             continue
 
         is_in_all = name in module_alls.get(file_path, set())

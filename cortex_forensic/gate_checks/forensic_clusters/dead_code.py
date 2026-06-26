@@ -124,6 +124,17 @@ def classify_dead_code_item(
             classification="likely_forgotten_wiring",
             reason="Added recently but not referenced anywhere")
 
+    # Precision guard (oracle FP fix): a PUBLIC (non-underscore) symbol that is
+    # merely unreferenced WITHIN the scanned set is NOT reliably dead -- it may
+    # be library / public API consumed by callers outside the scan scope. Only
+    # PRIVATE (underscore-prefixed) unreferenced symbols are treated as dead.
+    # Keeps recall on truly-private dead code (e.g. ``_never_called``) while
+    # eliminating false positives on public functions in partial/library scans.
+    if not name.startswith("_"):
+        return DeadCodeItem(name=name, file_path=file_path, line=line, kind=kind,
+            classification="standalone_utility",
+            reason="Public symbol unreferenced in scan -- may be external API")
+
     return DeadCodeItem(name=name, file_path=file_path, line=line, kind=kind,
         classification="dead_code",
         reason="Not referenced anywhere in the project")

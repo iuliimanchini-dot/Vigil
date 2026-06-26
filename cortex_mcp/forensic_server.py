@@ -44,9 +44,14 @@ INTERPRETING: exit_code 0 = clean, 1 = high/critical findings exist, 2 = error.
 Triage HIGH first. On clean third-party code most findings are size.* (large files)
 and broad_except (real `except: pass` swallows).
 
-REDUCING NOISE: create <project>/.cortex/disabled_gates.json = ["gate_id", ...] to
-skip gates for that project. Some heuristic gates (e.g. god_object_zones) are OFF by
-default and run only when explicitly named via the gates= argument.
+TUNING (enable / disable checks):
+  - DISABLE noisy gates for a project: create <project>/.cortex/disabled_gates.json
+    = ["gate_id", ...]; those gates never run (reported in meta.gates_skipped).
+  - RUN ONLY specific gates: pass gates="gate_id1,gate_id2" (comma-separated) -
+    everything else is skipped. Empty = run all applicable gates.
+  - ENABLE an opt-in heuristic gate (e.g. god_object_zones, OFF by default because
+    noisy): name it in gates=, e.g. gates="god_object_zones".
+  - RAISE the severity floor: severity="HIGH" keeps only HIGH/CRITICAL findings.
 """
 
 mcp = FastMCP("forensic-audit", instructions=_INSTRUCTIONS)
