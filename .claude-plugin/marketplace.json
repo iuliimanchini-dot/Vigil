@@ -1,0 +1,24 @@
+{
+  "name": "vigil-marketplace",
+  "owner": {
+    "name": "Julio"
+  },
+  "description": "Vigil: structural code mapping and forensic code-quality auditing tools for Claude Code.",
+  "plugins": [
+    {
+      "name": "vigil-tools",
+      "source": {
+        "source": "github",
+        "repo": "iuliimanchini-dot/Vigil"
+      },
+      "description": "Two MCP stdio servers: code-map (architecture/imports/hotspots/entrypoints across 5 languages) and forensic-audit (22 code-quality checks, summary-first, anti-hang file-count guard).",
+      "version": "0.1.0",
+      "author": {
+        "name": "Julio"
+      },
+      "homepage": "https://github.com/iuliimanchini-dot/Vigil",
+      "repository": "https://github.com/iuliimanchini-dot/Vigil",
+      "license": "MIT"
+    }
+  ]
+}

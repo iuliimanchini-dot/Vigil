@@ -1,0 +1,12 @@
+{
+  "name": "vigil-tools",
+  "description": "Vigil MCP servers: multi-language structural code mapping (code-map) and static forensic code-quality auditing (forensic-audit). Python/Go/Java/JS/TS via tree-sitter/AST.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Julio"
+  },
+  "homepage": "https://github.com/iuliimanchini-dot/Vigil",
+  "repository": "https://github.com/iuliimanchini-dot/Vigil",
+  "license": "MIT",
+  "keywords": ["mcp", "code-analysis", "forensic", "code-map", "static-analysis"]
+}

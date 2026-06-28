@@ -109,6 +109,28 @@ Both commands are entry points installed by `pip install -e .`.
 
 Place `.mcp.json` in the project root or in `~/.claude/`.
 
+### Option C — Claude Code plugin marketplace
+
+Installable as a Claude Code **plugin** straight from GitHub. The plugin launches the
+servers via `python -m vigil_mcp.*`, so the package must be importable in the Python that
+Claude Code uses — install it first, then add the marketplace:
+
+```bash
+pip install "git+https://github.com/iuliimanchini-dot/Vigil.git"
+```
+
+Then inside Claude Code:
+
+```
+/plugin marketplace add iuliimanchini-dot/Vigil
+/plugin install vigil-tools@vigil-marketplace
+/mcp        # code-map + forensic-audit appear
+```
+
+The plugin ships `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and a
+root `.mcp.json` declaring both stdio servers. (If `python` is not the interpreter with
+`vigil` installed, edit `.mcp.json`'s `command` to the full path of that interpreter.)
+
 ---
 
 ## Tool list

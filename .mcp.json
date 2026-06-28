@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "code-map": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "vigil_mcp.map_server"]
+    },
+    "forensic-audit": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "vigil_mcp.forensic_server"]
+    }
+  }
+}
