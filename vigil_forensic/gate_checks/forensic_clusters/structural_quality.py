@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Iterable
 
 from ...gate_models import EvidenceReference, GateCategory, GateImpact, GateSeverity, GateFileSnapshot, RepairKind
 from ..common import build_finding, normalize_path

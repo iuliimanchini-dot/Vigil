@@ -26,11 +26,10 @@ import os
 import re
 import sys
 import time
-import threading
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any, Generator
 
 
 def coerce_int(value: object, default: int = 0) -> int:

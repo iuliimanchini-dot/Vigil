@@ -1,7 +1,7 @@
 """API/protocol surface forensics. Clusters 27, 28b, 29b, 30."""
 from __future__ import annotations
 
-from .core import detect_language, _insufficient_evidence_finding
+from .core import detect_language
 from ...gate_models import (
     EvidenceReference,
     GateCategory,

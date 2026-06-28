@@ -9,8 +9,8 @@ legacy compatibility debt (C53).
 """
 from __future__ import annotations
 
-from ...source_analysis import is_source_file, is_test_file, get_language_id
-from ...gate_models import GateFinding, PostExecGateContext
+from ...source_analysis import is_source_file
+from ...gate_models import GateFinding
 from ..forensic_clusters import (
     assess_boundary_validation,
     assess_broad_catch_no_reraise,

@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from vigil_forensic._shared import EvidenceReference, GateCategory, GateCheckResult, GateImpact, GateSeverity, RepairKind
+from vigil_forensic._shared import EvidenceReference, GateCategory, GateCheckResult, GateImpact, GateSeverity
 from vigil_forensic.gate_models import PostExecGateContext
 from .common import build_check_result, build_finding, iter_touched_snapshots
 

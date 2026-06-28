@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from vigil_forensic._shared import is_executor_metadata_path
-from vigil_forensic._shared import GateCategory, GateImpact, GateSeverity, RepairKind
+from vigil_forensic._shared import GateCategory, GateImpact, GateSeverity
 from vigil_forensic.gate_models import PostExecGateContext
 from .common import build_check_result, build_finding
 import logging

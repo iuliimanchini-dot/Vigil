@@ -30,7 +30,6 @@ Design rules
 from __future__ import annotations
 
 import logging
-from typing import Iterable
 
 from vigil_forensic._shared import (
     EvidenceReference,

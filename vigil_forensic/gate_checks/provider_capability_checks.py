@@ -5,7 +5,7 @@ Registered in gate_registry.py before tool_hook_coverage_checks.
 """
 from __future__ import annotations
 
-from vigil_forensic._shared import GateCategory, GateCheckResult, GateImpact, GateSeverity, RepairKind
+from vigil_forensic._shared import GateCategory, GateCheckResult, GateImpact, GateSeverity
 from vigil_forensic.gate_models import PostExecGateContext
 from .common import build_check_result, build_finding
 import logging

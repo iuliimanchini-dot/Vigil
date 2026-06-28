@@ -14,11 +14,8 @@ load_allowlist, revalidate_allowlist, save_allowlist, filter_by_allowlist).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional
 
-from .core import detect_language, _insufficient_evidence_finding
+from .core import detect_language
 from ...gate_models import (
     EvidenceReference,
     GateCategory,

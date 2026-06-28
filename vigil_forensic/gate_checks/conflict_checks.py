@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
+from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity
 from vigil_forensic.gate_models import PostExecGateContext
 
 _CATEGORY = GateCategory.CONTRACT

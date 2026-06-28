@@ -6,7 +6,6 @@ previously had none -- signals unauthorized authority expansion.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
 from vigil_forensic.gate_models import PostExecGateContext

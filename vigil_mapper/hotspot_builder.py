@@ -21,10 +21,9 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .map_common import HOTSPOT_WEIGHTS, hotspot_mode_for_score, make_metadata
-from .map_errors import MapIntegrityError
+from .map_common import HOTSPOT_WEIGHTS, hotspot_mode_for_score
 from .map_models import AuthorityDomain, DataContractEntry, RepoMaps, StructuralEntry
-from .map_models_ext import ConflictEntry, HotspotEntry
+from .map_models_ext import HotspotEntry
 
 __all__ = ["build_hotspot_map", "compute_hotspot_churn_metadata"]
 

@@ -6,7 +6,6 @@ Extracted from runtime_builder.py to keep each file under 400 lines.
 from __future__ import annotations
 
 import ast
-from typing import TYPE_CHECKING
 import logging
 _log = logging.getLogger(__name__)
 

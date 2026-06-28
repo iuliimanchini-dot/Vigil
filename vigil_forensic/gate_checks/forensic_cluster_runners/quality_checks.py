@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import re
 
-from ...source_analysis import is_source_file, is_test_file, get_language_id
+from ...source_analysis import is_source_file, get_language_id
 from ...gate_models import GateFinding, PostExecGateContext
 from .._ast_helpers import collect_string_constant_line_ranges
 from ..forensic_clusters import (
@@ -32,7 +32,6 @@ from ..forensic_clusters import (
     assess_mutation_verified,
     assess_naming_consistency,
     assess_response_shape_drift,
-    assess_roundtrip_consistency,
     assess_secrets_in_code,
     assess_security_patterns,
     assess_shared_mutable_state,

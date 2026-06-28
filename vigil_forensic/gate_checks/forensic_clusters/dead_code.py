@@ -7,9 +7,8 @@ Clusters:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
-from .core import detect_language, _insufficient_evidence_finding
+from .core import detect_language
 from ...gate_models import (
     EvidenceReference,
     GateCategory,

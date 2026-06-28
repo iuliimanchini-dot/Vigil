@@ -15,7 +15,7 @@ from __future__ import annotations
 import ast
 import hashlib
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional
 
 from .core import detect_language, _insufficient_evidence_finding
 from ...gate_models import (

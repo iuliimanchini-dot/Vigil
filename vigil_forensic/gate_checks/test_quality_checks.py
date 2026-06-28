@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
-from typing import Optional
-from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
+from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity
 from vigil_forensic.gate_models import PostExecGateContext
 from .common import build_check_result, build_finding, has_allowlist_for, iter_touched_snapshots, normalize_path
 from ._ast_helpers import parse_python_source_or_emit_finding

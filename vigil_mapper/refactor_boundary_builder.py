@@ -27,11 +27,9 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 from .map_errors import MapIntegrityError
 from .map_models_ext import RefactorBoundary
-from .map_storage import maps_dir
 
 __all__ = [
     "load_refactor_seeds",

@@ -10,7 +10,6 @@ import concurrent.futures
 import json
 import sys
 import threading
-import time
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path

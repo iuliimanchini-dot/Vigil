@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import logging
-from pathlib import Path
 
 from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
 from vigil_forensic.gate_models import PostExecGateContext

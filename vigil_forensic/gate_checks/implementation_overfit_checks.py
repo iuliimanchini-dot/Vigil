@@ -22,7 +22,7 @@ from vigil_forensic._shared import (
     RepairKind,
 )
 from vigil_forensic.gate_models import PostExecGateContext
-from .common import build_check_result, build_finding, normalize_path
+from .common import build_finding, normalize_path
 from ._ast_helpers import parse_python_source_or_emit_finding
 
 _log = logging.getLogger(__name__)

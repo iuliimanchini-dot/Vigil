@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from vigil_forensic._shared import SOURCE_EXTENSIONS as _SOURCE_EXTENSIONS
-from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
+from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity
 from vigil_forensic.gate_models import PostExecGateContext
 from .common import build_check_result, build_finding, normalize_path
 import logging

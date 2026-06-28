@@ -12,7 +12,7 @@ from __future__ import annotations
 import ast
 import logging
 
-from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
+from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity
 from vigil_forensic.gate_models import PostExecGateContext
 from vigil_forensic.source_analysis import is_source_file
 from .common import build_check_result, build_finding, is_generated_file, normalize_path

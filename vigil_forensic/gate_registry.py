@@ -5,7 +5,6 @@ Adapted from the Vigil autoforensics gate_registry.
 from __future__ import annotations
 
 from vigil_forensic.gate_packs.universal import GATE_SPECS as _UNIVERSAL_SPECS
-from vigil_forensic._shared import GateCategory
 import logging
 _log = logging.getLogger(__name__)
 

@@ -43,21 +43,6 @@ from ._lexer import (
     strip_comments_only,
 )
 from ._patterns import (
-    RE_DYNAMIC_IMPORT,
-    RE_EXPORT_FROM_NAMED,
-    RE_EXPORT_FROM_STAR,
-    RE_IMPORT_DEFAULT,
-    RE_IMPORT_NAMED,
-    RE_IMPORT_NAMESPACE,
-    RE_IMPORT_SIDE_EFFECT,
-    RE_IMPORT_TYPE_DEFAULT,
-    RE_IMPORT_TYPE_NAMED,
-    RE_SYMBOL_CLASS,
-    RE_SYMBOL_CONST,
-    RE_SYMBOL_ENUM,
-    RE_SYMBOL_FUNCTION,
-    RE_SYMBOL_INTERFACE,
-    RE_SYMBOL_TYPE,
     classify_import,
 )
 from ._treesitter import (

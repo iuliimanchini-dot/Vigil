@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 from vigil_forensic._shared import BINARY_EXTENSIONS as _BINARY_EXTENSIONS
-from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity, RepairKind
+from vigil_forensic._shared import EvidenceReference, GateCategory, GateImpact, GateSeverity
 from vigil_forensic.gate_models import PostExecGateContext
 from .common import build_check_result, build_finding, normalize_path
 import logging

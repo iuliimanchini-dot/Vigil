@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Generator, Iterable
+from typing import Generator
 
 from tree_sitter import Node, Parser
 from tree_sitter_language_pack import get_language
