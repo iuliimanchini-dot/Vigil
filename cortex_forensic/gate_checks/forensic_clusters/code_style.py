@@ -108,6 +108,11 @@ _SAFE_NUMBERS = frozenset({
 # F9f: values that are always safe, regardless of context.
 _ALWAYS_SAFE_NUMBERS = frozenset({0, 1, 2, -1})
 
+# FP-round2-B (2026-06-28): integer literals with |value| below this bound are
+# treated as benign small constants (terminal widths, ASCII codes, byte values,
+# small counts) and not reported. Only larger / unusual literals are flagged.
+_MAGIC_INT_BOUND = 256
+
 # F9f: comment markers that document a fixed count (e.g., "C1..C11", "11 clusters").
 _DOCUMENTED_COUNT_MARKERS: tuple[str, ...] = (
     "c1..c",       # "C1..C11"
@@ -322,8 +327,28 @@ def assess_magic_numbers(
 
             if int_val is not None and int_val in _SAFE_NUMBERS:
                 continue
-            if int_val is not None and -10 <= int_val <= 10:
+            # FP-round2-B (2026-06-28): raise the small-int suppression bound.
+            # On real codebases the vast majority of bare small integers are
+            # benign (terminal widths like 24/80, ASCII control codes like 127,
+            # byte values, small column/limit counts like 11/12/20/50). The
+            # old window was only -10..10, which flagged every such value as a
+            # "magic number" and dominated the noise on click/mcp/filelock.
+            # We now suppress |int| < _MAGIC_INT_BOUND (256). Genuinely unusual
+            # magic constants (timeouts in seconds like 86400, bit masks like
+            # 65537, large sizes) are >= 256 and stay flagged. HTTP codes,
+            # powers of two up to 4096, and time constants are still covered
+            # explicitly by _SAFE_NUMBERS above.
+            if int_val is not None and -_MAGIC_INT_BOUND < int_val < _MAGIC_INT_BOUND:
                 continue
+            # FP-round2-B: sub-unit floats (|x| < 1.0) are almost always benign
+            # ratios / poll intervals / probabilities (e.g. 0.5, 0.1) rather
+            # than load-bearing magic constants. Suppress them conservatively.
+            if int_val is None:
+                try:
+                    if abs(val) < 1.0:
+                        continue
+                except (TypeError, ValueError):
+                    pass
             col = m.start()
             pre = line[:col]
             if pre.count('"') % 2 == 1 or pre.count("'") % 2 == 1:

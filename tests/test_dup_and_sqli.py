@@ -154,16 +154,28 @@ class TestNearDuplicateMerge:
         )
 
     def test_filelock_real_blocks_not_inflated(self):
-        """Real third-party file (filelock/asyncio.py): the per-line inflation
-        must collapse. 10 per-line windows there are really ~3 blocks."""
+        """Real third-party file (filelock/asyncio.py): no per-line inflation,
+        and — after FP-round2-D — no signature/parameter-mirror noise either.
+
+        The two regions this file used to report (lines 64-68<->358-362 and
+        78-89<->119-130) are BOTH parameter-list mirrors: the identical
+        ``lock_file: str | os.PathLike[str], timeout: float = -1, ...`` parameter
+        declarations shared by ``AsyncFileLockMeta.__call__`` and
+        ``BaseAsyncFileLock.__init__`` by API contract. Those are typing
+        scaffolding, not refactorable logic, and are now stripped by the
+        signature-scaffolding filter — so this file correctly yields ZERO
+        near-duplicate-logic findings. The bound (<=5) guards against any return
+        of per-line inflation while allowing the corrected 0.
+        """
         import cortex_forensic
         repo_root = Path(cortex_forensic.__file__).resolve().parent.parent
         f = repo_root / ".venv" / "Lib" / "site-packages" / "filelock" / "asyncio.py"
         if not f.is_file():
             pytest.skip("filelock not installed in .venv")
         findings = _dup_findings(f.name, f.read_text(encoding="utf-8", errors="replace"))
-        # Was 10 per-line findings; the real distinct blocks are few (<=5).
-        assert 1 <= len(findings) <= 5, (
+        # FP-round2-D: parameter-mirror "duplicates" are no longer reported;
+        # 0 is the correct, deduplicated result for this file.
+        assert 0 <= len(findings) <= 5, (
             f"expected merged block count (<=5), got {len(findings)}:\n"
             + "\n".join(x.summary for x in findings)
         )

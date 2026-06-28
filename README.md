@@ -466,6 +466,61 @@ items 6–7 in [`tests/test_dup_and_sqli.py`](tests/test_dup_and_sqli.py)):
    flagged; the "22 → 0" figure is measured on this repo, not a guarantee for all
    codebases. TDD'd in [`tests/test_commented_code_fp.py`](tests/test_commented_code_fp.py).
 
+10. **Round-2 FP cuts on large real projects (TYPE_CHECKING imports,
+    magic-number bounds, docstring & duplicate tightening).** Measured against
+    the vendored `click` / `mcp` / `filelock` packages, line-by-line inspection
+    of the noisiest gates found four distinct false-positive *sources*; each was
+    fixed at the source (not suppressed) and the corpus oracle stays **22/22**.
+    Totals: **click 128 → 66, mcp 236 → 189, filelock 38 → 14.**
+    - **`unused_import_scan` on `if TYPE_CHECKING:` imports.** Two bugs. (a) The
+      TYPE_CHECKING line-collector walked the guard's `else:` branch too, so
+      runtime fallback imports (`filelock/__init__.py:26-27`) were mis-tagged as
+      type-only and flagged. Now only the `if` body is scanned. (b) A
+      TYPE_CHECKING import is "used" only if it backs a *type annotation* — but
+      it also legitimately backs runtime `TypeVar(...)` construction
+      (`click/shell_completion.py:59`), `te.ParamSpec` / `sys.version_info`
+      attribute access (`click/utils.py:26`, `filelock/asyncio.py:22`), and
+      `__all__` re-exports. These are now counted as uses. A genuinely dead
+      TYPE_CHECKING import (referenced nowhere) is still flagged. click `2 → 0`,
+      filelock `7 → 0`.
+    - **`magic_number_scan` bounds.** The old window suppressed only `-10..10`
+      plus a fixed safe-set, so every bare small integer (terminal widths `24`,
+      ASCII `127`, byte/column values `11/12/20/50`) and sub-unit float
+      (`0.1`/`0.5`) dominated the noise. The small-int suppression bound is
+      raised to `|n| < 256` and sub-unit floats are skipped; HTTP codes / powers
+      of two / time constants remain explicitly safe. Large/unusual literals
+      (oracle's `86400`, mcp's `8707`) stay flagged. click `11 → 0`.
+    - **`docstring_param_scan` rebuilt on AST.** The old `def …(([^)]*))` regex
+      truncated parameters at the first `)` inside an annotation
+      (`f: t.Callable[..., t.Any]` → garbage param `t.Any]`) and could not span
+      multi-line / overloaded signatures, yielding 16 phantom mismatches on
+      click (zero real). Parameters now come from `ast` (including `*args` /
+      `**kwargs`, which idiomatic docstrings document by bare name), the docstring
+      is read via `ast.get_docstring`, Google-style `Args:` parsing stops at the
+      next `Returns:`/`Raises:` section (no more `Returns`/`Raises` "params"), and
+      the reST `:param <type> name:` form is parsed by last-token. Only the
+      genuine **documented-but-absent-parameter** direction is reported. click
+      `16 → 0`; mcp/filelock retain only real drift (e.g. `mcp …/server.py:125`
+      documents `server` for a param renamed to `_`).
+    - **`duplicate_scan` signature/parameter mirrors.** ~75 % of click's 38
+      hits and filelock's were `@overload` stubs, parameter-list mirrors, and
+      shared signatures (e.g. filelock `AsyncFileLockMeta.__call__` ↔
+      `BaseAsyncFileLock.__init__`) — typing scaffolding repeated by API
+      contract, not refactorable logic. Signature-scaffolding lines (decorators,
+      `def` headers, bare `name: type = default,` parameter lines, `): ...`
+      stubs) are excluded from the duplicate-fingerprint, and a region must span
+      **≥ 5 meaningful lines** to report. Genuine multi-statement logic
+      duplicates survive (oracle's 6-line `route_alpha`/`route_beta`; click's
+      `_termui_impl.py` pager fallbacks). click `38 → 5`, filelock `13 → 2`.
+    - **Left as real (not tightened):** `context_fallback_save.fallback_without_else`
+      (4 on click, 4 on mcp). Inspected — these are heterogeneous low-severity
+      advisories (input-validation `return 400`, mode dispatch, non-task counter
+      increments). They are *advisory by design* ("a reviewer must confirm …
+      intentional") and no single safe predicate separates them from real
+      fallbacks without risking over-suppression, so they are reported honestly
+      rather than gamed away. TDD'd in
+      [`tests/test_fp_round2.py`](tests/test_fp_round2.py).
+
 **Residual honesty.** The remaining output is dominated by the objective
 `size.*` gates (real breaches of published linter limits) and
 `broad_except.swallow` (genuine `except: pass`). These are trustworthy. The

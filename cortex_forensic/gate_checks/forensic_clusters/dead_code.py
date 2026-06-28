@@ -147,7 +147,14 @@ def classify_dead_code_item(
 
 def _collect_type_checking_import_line_nums(tree: "ast.Module") -> set[int]:
     """Return line numbers of every Import / ImportFrom node that appears inside
-    an `if TYPE_CHECKING:` (or `if typing.TYPE_CHECKING:`) block.
+    the BODY of an `if TYPE_CHECKING:` (or `if typing.TYPE_CHECKING:`) block.
+
+    Only the ``if`` body is scanned, NOT the ``else`` branch.  Imports in the
+    ``else:`` branch of a TYPE_CHECKING guard are RUNTIME imports (the common
+    ``if TYPE_CHECKING: <type-import> else: <runtime-import-or-fallback>``
+    idiom); tagging them as TYPE_CHECKING imports produced false positives on
+    real projects (e.g. filelock ``__init__.py`` else-branch imports). Fix
+    2026-06-28 (FP-round2-A).
 
     AST walk only — no regex on source text.
     """
@@ -164,10 +171,55 @@ def _collect_type_checking_import_line_nums(tree: "ast.Module") -> set[int]:
         )
         if not is_tc_guard:
             continue
-        for child in ast.walk(node):
-            if isinstance(child, (ast.Import, ast.ImportFrom)):
-                tc_import_lines.add(child.lineno)
+        # Walk ONLY the body statements (not node.orelse). Nested If/imports
+        # inside the body are still collected via ast.walk over each stmt.
+        for stmt in node.body:
+            for child in ast.walk(stmt):
+                if isinstance(child, (ast.Import, ast.ImportFrom)):
+                    tc_import_lines.add(child.lineno)
     return tc_import_lines
+
+
+def _collect_runtime_referenced_names(tree: "ast.Module") -> set[str]:
+    """Collect every bare identifier referenced as a runtime VALUE.
+
+    This covers usages a TYPE_CHECKING import legitimately satisfies that are
+    NOT type annotations, and which ``_collect_forward_ref_strings`` misses:
+
+      * ``Name`` loads anywhere (``TypeVar(...)`` call name, ``X`` value use).
+      * ``Attribute`` base names (``te.ParamSpec`` -> ``te``, ``sys.version_info``
+        -> ``sys``).
+      * ``__all__`` string members (a TYPE_CHECKING import re-exported via
+        ``__all__`` is a public re-export, not a dead import).
+
+    Fix 2026-06-28 (FP-round2-A): TYPE_CHECKING imports are treated as USED if
+    the name appears in this set, because such imports exist precisely to back
+    type-only references — which include runtime ``TypeVar(...)`` construction,
+    ``sys.version_info`` version-gating, and ``__all__`` re-exports.
+
+    AST walk only.
+    """
+    import ast
+
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            # Walk down to the root Name of an attribute chain (a.b.c -> a).
+            base = node.value
+            while isinstance(base, ast.Attribute):
+                base = base.value
+            if isinstance(base, ast.Name):
+                names.add(base.id)
+        elif isinstance(node, ast.Assign):
+            # __all__ = ["Foo", "Bar"] — string members are re-exports.
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "__all__":
+                    for elt in ast.walk(node.value):
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            names.add(elt.value)
+    return names
 
 
 def _collect_forward_ref_strings(tree: "ast.Module") -> set[str]:
@@ -273,6 +325,7 @@ def assess_unused_imports(
     # --- AST pre-pass for TYPE_CHECKING detection (F9c) ------------------
     tc_import_line_nums: set[int] = set()
     forward_ref_names: set[str] = set()
+    runtime_ref_names: set[str] = set()
     try:
         tree = ast.parse(content)
     except SyntaxError:
@@ -280,6 +333,11 @@ def assess_unused_imports(
     if tree is not None:
         tc_import_line_nums = _collect_type_checking_import_line_nums(tree)
         forward_ref_names = _collect_forward_ref_strings(tree)
+        # FP-round2-A (2026-06-28): names referenced as runtime values
+        # (TypeVar(...) call, te.ParamSpec attribute base, sys.version_info,
+        # __all__ re-export). A TYPE_CHECKING import satisfying any of these is
+        # USED, not dead.
+        runtime_ref_names = _collect_runtime_referenced_names(tree)
 
     lines = content.splitlines()
 
@@ -345,6 +403,13 @@ def assess_unused_imports(
             # name appears anywhere as an annotation (direct Name or string
             # forward-ref). Otherwise flag it as a dead TYPE_CHECKING import.
             if name in forward_ref_names:
+                continue
+            # FP-round2-A (2026-06-28): also treat as used if the name is
+            # referenced as a runtime value inside (or outside) the block —
+            # TypeVar(...) construction, `te.ParamSpec`/`sys.version_info`
+            # attribute base, or an `__all__` re-export. These are the
+            # legitimate non-annotation uses a TYPE_CHECKING import backs.
+            if name in runtime_ref_names:
                 continue
             # Not referenced anywhere in annotations → still flag below with
             # specialized wording.

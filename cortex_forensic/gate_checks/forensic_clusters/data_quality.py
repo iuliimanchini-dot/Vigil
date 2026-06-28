@@ -130,6 +130,48 @@ def assess_naive_timezone(
 # ---------------------------------------------------------------------------
 
 
+import re as _re
+
+# FP-round2-D (2026-06-28): signature / typing scaffolding line shapes that must
+# NOT count as meaningful duplicate lines. These repeat by language requirement
+# (typing overloads) or API symmetry and are not refactorable logic:
+#   * decorator lines:            ``@t.overload`` / ``@property`` / ``@staticmethod``
+#   * def openers / closers:      ``def f(`` / ``async def f(`` / ``): ...`` / ``) -> X:``
+#   * bare parameter declarations inside a multi-line signature:
+#         ``name`` | ``name,`` | ``name=default,`` | ``name: type,`` | ``*args,``
+#     where the value is a simple literal/identifier (NOT a function call, so a
+#     real statement like ``record = build_record(...)`` is never skipped).
+#   * lone ellipsis stub bodies:  ``...``
+_SCAFFOLD_PARAM_RE = _re.compile(
+    r"^\*{0,2}[A-Za-z_]\w*"            # name, *args, **kwargs
+    r"(?:\s*:\s*[^=(]+?)?"             # optional annotation (no call parens)
+    r"(?:\s*=\s*[^(]+?)?"             # optional simple default (no call parens)
+    r",?$"                             # optional trailing comma
+)
+
+
+def _is_signature_scaffolding(s: str) -> bool:
+    """True if normalized line *s* is signature / typing scaffolding."""
+    if s == "..." or s.endswith("): ...") or s == "): ..." or s.endswith(") -> ..."):
+        return True
+    if s.startswith("@"):  # decorator
+        return True
+    if s.startswith("def ") or s.startswith("async def "):
+        # ``def f(`` opener (possibly with the full single-line signature). A
+        # single-line def with a body on the same line is rare; treat the
+        # ``def`` header as scaffolding either way.
+        return True
+    if s in (")", "):", "->", ") ->"):
+        return True
+    # Closer with return type only: ``) -> SomeType:`` (no other statement).
+    if s.startswith(")") and s.endswith(":"):
+        return True
+    # Bare parameter declaration line inside a multi-line signature.
+    if _SCAFFOLD_PARAM_RE.match(s) and "(" not in s:
+        return True
+    return False
+
+
 def assess_near_duplicate_code(
     file_path: str,
     content: str,
@@ -157,12 +199,31 @@ def assess_near_duplicate_code(
         return []
 
     BLOCK_SIZE = 4
+    # FP-round2-D (2026-06-28): minimum number of MEANINGFUL (post-normalization,
+    # non-scaffolding) lines a duplicated region must span to be reported.
+    #
+    # The PRIMARY noise discriminator is ``_is_signature_scaffolding`` below: on
+    # real code (click, mcp) most near-duplicate hits were typing/signature
+    # mirrors — ``@t.overload`` stubs, parameter-list mirrors — whose lines are
+    # now stripped from ``normalized`` entirely, so those regions never form.
+    #
+    # This line-count floor is a SECONDARY filter against very short residual
+    # mirrors (e.g. repeated 3-4 line encoding-literal bodies). It is set to 5
+    # so that genuine multi-statement logic duplicates (>=5 meaningful lines)
+    # are still reported — including the oracle's 6-line route_alpha/route_beta
+    # bodies and 4-statement+return logic blocks — while trivial 3-4 line
+    # mirrors are dropped.
+    MIN_DUP_REGION_LINES = 5
     normalized: list[tuple[str, int]] = []
     for i, line in enumerate(lines, 1):
         s = line.strip()
         if not s or s.startswith("#") or s.startswith("//") or s.startswith("*"):
             continue
         if s in ("}", "{", "pass", "return", "break", "continue", "else:", "try:", "finally:"):
+            continue
+        # FP-round2-D: skip signature / typing scaffolding so overload stubs and
+        # parameter-list mirrors do not accumulate "meaningful" duplicate lines.
+        if _is_signature_scaffolding(s):
             continue
         normalized.append((" ".join(s.split()), i))
 
@@ -224,6 +285,14 @@ def assess_near_duplicate_code(
     findings: list[GateFinding] = []
     for orig_start, orig_end, dup_start, dup_end in regions:
         n_lines = orig_end - orig_start + 1
+        # FP-round2-D: count MEANINGFUL (normalized, non-scaffolding) lines that
+        # actually fall inside the original region — the raw line span can
+        # include blank/comment gaps. Require >= MIN_DUP_REGION_LINES to report.
+        meaningful_in_region = sum(
+            1 for _norm_text, _ln in normalized if orig_start <= _ln <= orig_end
+        )
+        if meaningful_in_region < MIN_DUP_REGION_LINES:
+            continue
         detail = (
             f"Near-duplicate block at lines {orig_start}-{orig_end} <-> "
             f"{dup_start}-{dup_end} ({n_lines} lines)"

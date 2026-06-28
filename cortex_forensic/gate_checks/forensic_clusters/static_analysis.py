@@ -627,6 +627,72 @@ def assess_resource_leaks(
 # Cluster 38: Docstring/Signature Parameter Drift
 # ---------------------------------------------------------------------------
 
+# FP-round2-C (2026-06-28): Google-style section headers that are NOT params.
+# The old ``Args:\s*\n((?:\s+\w+.*\n)*)`` capture ran past the Args block into
+# the following ``Returns:`` / ``Raises:`` / ``Yields:`` sections (separated by a
+# blank line that the greedy ``.*\n`` re-absorbed), so section headers like
+# ``Returns`` / ``Raises`` / ``RuntimeError`` were mis-parsed as documented
+# params and reported as drift on every Google-style docstring (mcp). We now
+# parse the Args block line-by-line, stopping at a blank line or the next
+# section header, and filter these keywords defensively.
+_DOCSTRING_SECTION_HEADERS = frozenset({
+    "Args", "Arguments", "Parameters", "Returns", "Return", "Yields", "Yield",
+    "Raises", "Raise", "Examples", "Example", "Note", "Notes", "Warning",
+    "Warnings", "See", "References", "Attributes", "Todo",
+})
+
+
+def _extract_documented_params(docstring: str) -> list[str]:
+    """Extract the parameter NAMES a docstring documents.
+
+    Supports reStructuredText ``:param name:`` and Google-style ``Args:``
+    blocks. For the Google block we read only the indented lines immediately
+    under ``Args:`` and STOP at the first blank line or the next section header
+    (``Returns:`` / ``Raises:`` / ...), so section headers are never mistaken
+    for parameter names. Section-header keywords are also filtered defensively.
+    """
+    import re
+
+    # reStructuredText form. Supports both ``:param name:`` and the
+    # type-prefixed ``:param <type> name:`` variant (e.g.
+    # ``:param futures.Executor | None value:``) where the NAME is the last
+    # identifier before the closing colon — capturing the first token there
+    # would misread the type (``futures``) as the param (FP-round2-C).
+    rst: list[str] = []
+    for body in re.findall(r':param\s+([^:]+):', docstring):
+        tokens = re.findall(r'[A-Za-z_]\w*', body)
+        if tokens:
+            rst.append(tokens[-1])
+    if rst:
+        return rst
+
+    # Google-style ``Args:`` block.
+    lines = docstring.splitlines()
+    params: list[str] = []
+    in_args = False
+    for raw in lines:
+        line = raw.rstrip()
+        stripped = line.strip()
+        header = stripped[:-1] if stripped.endswith(":") else stripped
+        is_section_header = header in _DOCSTRING_SECTION_HEADERS and (
+            stripped.endswith(":") or stripped == header
+        )
+        if not in_args:
+            if stripped in ("Args:", "Arguments:", "Parameters:"):
+                in_args = True
+            continue
+        # Inside the Args block.
+        if stripped == "":
+            break  # blank line ends the block
+        if is_section_header:
+            break  # next section (Returns:/Raises:/...) ends the block
+        m = re.match(r'(\w+)\s*(?:\([^)]*\))?\s*:', line.strip())
+        if m:
+            name = m.group(1)
+            if name not in _DOCSTRING_SECTION_HEADERS:
+                params.append(name)
+    return params
+
 
 def assess_docstring_params(
     file_path: str,
@@ -649,53 +715,88 @@ def assess_docstring_params(
     findings: list[GateFinding] = []
 
     if lang == "python":
-        func_re = re.compile(r'^(\s*)def\s+(\w+)\s*\(([^)]*)\)\s*(?:->.*)?:', re.MULTILINE)
-        for m in func_re.finditer(content):
-            func_name = m.group(2)
-            params_str = m.group(3)
-            raw_params = [p.strip().split(":")[0].split("=")[0].strip()
-                          for p in params_str.split(",") if p.strip()]
-            actual_params = [p for p in raw_params
-                            if p and p not in ("self", "cls") and not p.startswith("*")]
-            if not actual_params:
+        # FP-round2-C (2026-06-28): AST-based parameter extraction.
+        #
+        # The old detector used ``def\s+\w+\s*\(([^)]*)\)`` to grab the param
+        # text. ``[^)]*`` stops at the FIRST ``)`` — which is wrong for any
+        # type-annotated signature (``f: t.Callable[..., t.Any]``) and any
+        # multi-line / overloaded signature. That truncation produced garbage
+        # "params" like ``t.Any]`` / ``str]]`` and even leaked inline-comment
+        # fragments, yielding 16 false mismatches on click alone (all artifacts,
+        # zero real drift).
+        #
+        # We now parse the file with ``ast`` and read real parameter names from
+        # ``node.args`` (posonly + args + kwonly; ``*args`` / ``**kwargs`` and
+        # ``self`` / ``cls`` excluded — those are conventionally undocumented).
+        # We only flag the GENUINE, actionable drift direction:
+        #   * a parameter DOCUMENTED in the docstring that the function does NOT
+        #     accept ("extra in docs" — a renamed / removed / typo'd param).
+        # We deliberately do NOT flag "param present but undocumented": partial
+        # parameter docs are ubiquitous and not a defect, and that direction was
+        # the source of most remaining noise.
+        import ast as _ast
+
+        try:
+            _tree = _ast.parse(content)
+        except SyntaxError:
+            return findings
+
+        def _sig_param_names(fn) -> set[str]:
+            """Return EVERY name the signature accepts.
+
+            We include ``self`` / ``cls`` (a real param may legitimately be
+            named ``cls`` — e.g. click's free function ``add_completion_class``),
+            and crucially ``*args`` / ``**kwargs`` names, because idiomatic
+            docstrings document var-positional / var-keyword params by their
+            bare name (``:param param_decls:`` for ``*param_decls``). Since this
+            gate only flags the "documented-but-not-a-parameter" direction, an
+            over-inclusive accepted set can only SUPPRESS false positives, never
+            create them. FP-round2-C (2026-06-28).
+            """
+            a = fn.args
+            names: list[str] = [arg.arg for arg in (
+                list(a.posonlyargs) + list(a.args) + list(a.kwonlyargs)
+            )]
+            if a.vararg is not None:
+                names.append(a.vararg.arg)
+            if a.kwarg is not None:
+                names.append(a.kwarg.arg)
+            return set(names)
+
+        for fn in _ast.walk(_tree):
+            if not isinstance(fn, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                continue
+            actual_params = _sig_param_names(fn)
+
+            docstring = _ast.get_docstring(fn, clean=False)
+            if not docstring:
+                continue
+            doc_params = _extract_documented_params(docstring)
+            if not doc_params:
                 continue
 
-            end_pos = m.end()
-            rest = content[end_pos:end_pos + 2000]
-            doc_match = re.match(r'\s*(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')', rest, re.DOTALL)
-            if not doc_match:
-                continue
-            docstring = doc_match.group(1) or doc_match.group(2) or ""
-            doc_params = re.findall(r':param\s+(\w+)', docstring)
-            if not doc_params:
-                args_match = re.search(r'Args:\s*\n((?:\s+\w+.*\n)*)', docstring)
-                if args_match:
-                    doc_params = re.findall(r'^\s+(\w+)\s*(?:\(|:)', args_match.group(1), re.MULTILINE)
-            if not doc_params:
+            extra_in_doc = set(doc_params) - actual_params
+            if not extra_in_doc:
                 continue
 
-            line_num = content[:m.start()].count("\n") + 1
-            if set(doc_params) != set(actual_params):
-                missing_in_doc = set(actual_params) - set(doc_params)
-                extra_in_doc = set(doc_params) - set(actual_params)
-                parts = []
-                if missing_in_doc:
-                    parts.append(f"missing from docs: {', '.join(sorted(missing_in_doc))}")
-                if extra_in_doc:
-                    parts.append(f"extra in docs: {', '.join(sorted(extra_in_doc))}")
-                detail = f"Docstring/signature mismatch in {func_name}(): {'; '.join(parts)}"
-                findings.append(build_finding(
-                    check_id="docstring_param_scan",
-                    category=GateCategory.REPORTING,
-                    title=f"[docstring_drift] {file_path}:{line_num}:{func_name}",
-                    severity=GateSeverity.LOW,
-                    impact=GateImpact.WARN,
-                    summary=detail,
-                    recommendation=f"Update docstring for {func_name}() to match actual parameters.",
-                    evidence=(EvidenceReference(kind="probe", path=file_path, detail=detail, ok=False),),
-                    repair_kind=RepairKind.ADD_PROOF.value,
-                    executor_action=f"Fix docstring drift in {func_name}() at {file_path}:{line_num}",
-                ))
+            func_name = fn.name
+            line_num = fn.lineno
+            detail = (
+                f"Docstring/signature mismatch in {func_name}(): "
+                f"documented but not a parameter: {', '.join(sorted(extra_in_doc))}"
+            )
+            findings.append(build_finding(
+                check_id="docstring_param_scan",
+                category=GateCategory.REPORTING,
+                title=f"[docstring_drift] {file_path}:{line_num}:{func_name}",
+                severity=GateSeverity.LOW,
+                impact=GateImpact.WARN,
+                summary=detail,
+                recommendation=f"Update docstring for {func_name}() to match actual parameters.",
+                evidence=(EvidenceReference(kind="probe", path=file_path, detail=detail, ok=False),),
+                repair_kind=RepairKind.ADD_PROOF.value,
+                executor_action=f"Fix docstring drift in {func_name}() at {file_path}:{line_num}",
+            ))
             if len(findings) >= 10:
                 break
 
