@@ -14,6 +14,11 @@ claude mcp add forensic-audit -- vigil-forensic-mcp
 
 Then ask Claude: *"map this repo before editing"*, or *"run a forensic audit on these changes"*.
 
+> **Agent brief (preflight).** `get_code_map_results(view="brief")` returns a compact,
+> *agent-facing* briefing synthesised from the maps — entry points, state write-sites
+> (check before editing), riskiest files, conflicts, and a suggested read order. Hand it
+> to an agent before it edits an unfamiliar repo, instead of letting it read everything.
+
 **License:** MIT (see [LICENSE](LICENSE)).
 
 ---
