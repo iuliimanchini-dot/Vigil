@@ -60,6 +60,14 @@ Known limitation: entrypoints exposed only via packaging (`console_scripts` / `[
 
 ## Install
 
+From PyPI:
+
+```bash
+pip install vigil-codeintel
+```
+
+Or from source (for development):
+
 ```bash
 pip install -e .
 ```
@@ -111,12 +119,12 @@ Place `.mcp.json` in the project root or in `~/.claude/`.
 
 ### Option C — Claude Code plugin marketplace
 
-Installable as a Claude Code **plugin** straight from GitHub. The plugin launches the
-servers via `python -m vigil_mcp.*`, so the package must be importable in the Python that
+Installable as a Claude Code **plugin**. The plugin launches the servers via
+`python -m vigil_mcp.*`, so the package must be importable in the Python that
 Claude Code uses — install it first, then add the marketplace:
 
 ```bash
-pip install "git+https://github.com/iuliimanchini-dot/Vigil.git"
+pip install vigil-codeintel
 ```
 
 Then inside Claude Code:
