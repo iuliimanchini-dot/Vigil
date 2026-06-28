@@ -1,8 +1,20 @@
 # vigil
 
-Two FastMCP stdio servers for code intelligence, backed by multi-language static analysis cores.
+**A pre-action intelligence layer for coding agents.** Before an agent (or you) edits a repo, vigil builds a compact architecture map and runs a static forensic audit — so the agent finds entry points, write-sites, data contracts, hotspots, and risky code *without reading the whole repository*. It is not "another linter": it is bounded, summary-first context for agentic coding.
 
-**License:** MIT (see [LICENSE](LICENSE)). Change the copyright holder before any publication.
+Two MCP stdio servers, backed by multi-language static analysis (tree-sitter/AST — it **never runs your code**).
+
+## 30-second start
+
+```bash
+pip install vigil-codeintel
+claude mcp add code-map -- vigil-mapper-mcp
+claude mcp add forensic-audit -- vigil-forensic-mcp
+```
+
+Then ask Claude: *"map this repo before editing"*, or *"run a forensic audit on these changes"*.
+
+**License:** MIT (see [LICENSE](LICENSE)).
 
 ---
 
@@ -12,7 +24,7 @@ Two FastMCP stdio servers for code intelligence, backed by multi-language static
 
 - **`vigil_mapper`** — structural code mapper. Parses Python (stdlib `ast`) and Go/Java/JS/TS (tree-sitter). Produces typed maps: structural (imports + symbols), data contracts, runtime signals, authority writes, hotspots, refactor boundaries, conflicts, and findings. Output is written to `<project>/.cortex/maps/` as JSON.
 
-- **`vigil_forensic`** — static forensic gate auditor. Runs a suite of 40+ pattern-based checks (broad-except, hallucinations, TOCTOU, security injection, config-safety, contract drift, etc.) against a project directory. Returns structured findings with severity, category, evidence, and fingerprint. Single public function: `run_forensic_audit(project_dir, ...) -> dict`.
+- **`vigil_forensic`** — static forensic gate auditor. Defines **190+ distinct checks across ~110 check families** (broad-except, hallucinations, TOCTOU, security injection, config-safety, contract drift, **ML/NN correctness** — look-ahead bias, train/test leakage, etc.) and runs the file-applicable subset against a project directory (some checks are runtime-only and skipped in static mode). Returns structured findings with severity, category, evidence, and fingerprint. Single public function: `run_forensic_audit(project_dir, ...) -> dict`.
 
 - **`vigil_mcp`** — two FastMCP stdio servers (`code-map`, `forensic-audit`) that wrap the above cores behind a **background-job + poll** API. Resource-constrained: max 2 concurrent jobs, cancellable, output paginated/capped at 80 000 chars (~25 k tokens) per page.
 
