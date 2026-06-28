@@ -247,6 +247,7 @@ _FILE_BASED_GATES: frozenset[str] = frozenset({
     "temporal_freshness", "provenance", "reporting", "fix_without_test", "semantic_intent",
     "testing", "forensic_clusters", "project_specific", "hallucination", "artifact_completeness",
     "tool_hook_coverage", "codex_state", "policy_boundary", "draft_boundary", "codex_supervision",
+    "ml_checks",
 })
 
 
