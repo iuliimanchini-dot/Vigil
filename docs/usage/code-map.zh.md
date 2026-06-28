@@ -87,3 +87,52 @@ C:\Users\You\path\to\cortex-codeintel\.venv\Scripts\python.exe
 - 唯一的例外是 **`refactor_boundary`**：把重构目标作为它的 seed 提供，让它知道要计算哪条边界。
 - **先用摘要**，然后用 `map='<type>'`（例如 `map='structural'`）深入查看某一张地图，或用 `view='full'` 获取全部。两种视图都通过 `page=` 分页。
 - 结果会**缓存在磁盘上**，位于 `<project>/.cortex/` 之下；`load_code_map_by_path(path)` 可在不重新构建的情况下重新读取它们。
+
+## Seed 文件（可选）
+
+**seed** 是你放进 `<project>/.cortex/map_seeds/` 的一个小 JSON 文件，用于*精炼*某张地图的输出。**你几乎从不需要它**——8 张地图中有 6 张无需 seed 即可开箱工作。seed 只对三张地图有意义：
+
+- **authority** → `authority_domains.json`。没有 seed 时，每个写入点都会作为各自推断出的「按写入者」域被自动浮现（已经很有用）。有 seed 时，写入者会按 glob 模式**归并到具名的域**——例如把所有配置写入者归到一个 `config_writers` 域下。
+- **runtime** → `runtime_seed.json`。自动发现能找到文件内的入口点（`__main__` / async）。seed 让你能**声明额外的运行时节点**，即静态分析看不到的那些：cron 任务、由外部启动的 worker、`console_scripts` 入口点。
+- **refactor_boundary** → `refactor_boundaries.json`。这张地图本质上**由 seed 驱动**：seed 定义重构*目标*以及哪些文件被允许 / 监视 / 禁止。没有 seed 它就不产出边界。
+
+何时需要 seed：把 authority 写入归并成域；声明扫描器够不到的运行时节点；或设定一个重构目标 / 边界。
+
+### 格式
+
+每个 seed 都是一个带 `schema_version` 和一组条目列表的 JSON 对象。可直接复制的模板位于 `docs/examples/map_seeds/`。
+
+**`authority_domains.json`**——必填：`schema_version`、`domains[]`；每个域需要 `authority_domain`（域名）和 `target_file_patterns`（glob 模式；当写入者某个已解析的写入目标与模式匹配时，它就加入该域）：
+
+```json
+{
+  "schema_version": "1.0",
+  "domains": [
+    {
+      "authority_domain": "config_writers",
+      "target_file_patterns": ["config/*.json", "**/settings.py"]
+    }
+  ]
+}
+```
+
+**`runtime_seed.json`**——必填：`schema_version`（必须恰好是 `"1.0.0"`）、`nodes[]`；每个节点需要 `node`（其名称）。每个节点可选：`defined_in`、`kind`、`side_effects`、`depends_on_env`、`tags` 以及其他若干字段：
+
+```json
+{
+  "schema_version": "1.0.0",
+  "nodes": [
+    {
+      "node": "cron_nightly_report",
+      "defined_in": "ops/cron.py",
+      "kind": "scheduled_job"
+    }
+  ]
+}
+```
+
+（`refactor_boundaries.json` 采用相同的 `schema_version` + `entries[]` 形式，其中每个条目需要一个 `boundary_id`，外加 `goal` / `allowed_files` / `forbidden_files`。）
+
+### 放在哪里
+
+把文件放在你要绘制地图的项目里的 `<project>/.cortex/map_seeds/<name>.json` 路径下。该目录在每次构建时都会被读取；缺少 seed 不是错误（地图会回退到自动发现）。从 `docs/examples/map_seeds/` 复制一个模板并编辑即可。

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "domains": [
+    {
+      "authority_domain": "config_writers",
+      "target_file_patterns": [
+        "config/*.json",
+        "config/*.yaml",
+        "**/settings.py"
+      ]
+    },
+    {
+      "authority_domain": "cache_writers",
+      "target_file_patterns": [
+        ".cache/**",
+        "**/*.cache"
+      ]
+    }
+  ]
+}

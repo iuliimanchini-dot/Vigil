@@ -87,3 +87,52 @@ C:\Users\You\path\to\cortex-codeintel\.venv\Scripts\python.exe
 - Единственное исключение — **`refactor_boundary`**: задайте цель рефакторинга в качестве seed-а, чтобы он знал, какую границу вычислять.
 - Используйте **сначала сводку**, затем углубляйтесь в одну карту через `map='<type>'` (например, `map='structural'`) или получайте всё через `view='full'`. Оба вида постраничные через `page=`.
 - Результаты **кэшируются на диске** в `<project>/.cortex/`; `load_code_map_by_path(path)` перечитывает их без новой сборки.
+
+## Seed-файлы (опционально)
+
+**Seed** — это небольшой JSON-файл, который вы кладёте в `<project>/.cortex/map_seeds/`, чтобы *уточнить* вывод карты. **Он почти никогда не нужен** — 6 из 8 карт работают «из коробки» без seed-а. Seed важен для трёх карт:
+
+- **authority** → `authority_domains.json`. Без seed-а каждое место записи автоматически выявляется как отдельный выведенный домен-на-писателя (уже полезно). С seed-ом писатели **группируются в именованные домены** по glob-шаблонам — например, все писатели конфигов под одним доменом `config_writers`.
+- **runtime** → `runtime_seed.json`. Автообнаружение находит точки входа в самом файле (`__main__` / async). Seed позволяет **объявить дополнительные runtime-узлы**, которые статический анализ увидеть не может: cron-задачи, внешне запускаемые воркеры, точки входа `console_scripts`.
+- **refactor_boundary** → `refactor_boundaries.json`. Эта карта по сути **управляется seed-ом**: seed задаёт *цель* рефакторинга и какие файлы разрешены / отслеживаются / запрещены. Без seed-а она не выдаёт границ.
+
+Когда seed нужен: чтобы сгруппировать записи authority в домены; чтобы объявить runtime-узлы, до которых сканер не дотягивается; или чтобы задать цель/границу рефакторинга.
+
+### Формат
+
+Каждый seed — это JSON-объект с `schema_version` и списком записей. Готовые к копированию шаблоны лежат в `docs/examples/map_seeds/`.
+
+**`authority_domains.json`** — обязательны: `schema_version`, `domains[]`; каждому домену нужны `authority_domain` (имя домена) и `target_file_patterns` (glob-шаблоны; писатель попадает в домен, когда одна из его разрешённых целей записи совпадает с шаблоном):
+
+```json
+{
+  "schema_version": "1.0",
+  "domains": [
+    {
+      "authority_domain": "config_writers",
+      "target_file_patterns": ["config/*.json", "**/settings.py"]
+    }
+  ]
+}
+```
+
+**`runtime_seed.json`** — обязательны: `schema_version` (должна быть ровно `"1.0.0"`), `nodes[]`; каждому узлу нужен `node` (его имя). Опционально для узла: `defined_in`, `kind`, `side_effects`, `depends_on_env`, `tags` и ещё несколько:
+
+```json
+{
+  "schema_version": "1.0.0",
+  "nodes": [
+    {
+      "node": "cron_nightly_report",
+      "defined_in": "ops/cron.py",
+      "kind": "scheduled_job"
+    }
+  ]
+}
+```
+
+(`refactor_boundaries.json` следует той же форме `schema_version` + `entries[]`, где каждой записи нужен `boundary_id` плюс `goal` / `allowed_files` / `forbidden_files`.)
+
+### Куда класть
+
+Поместите файл по пути `<project>/.cortex/map_seeds/<name>.json` в проекте, который вы картируете. Каталог читается при каждой сборке; отсутствие seed-а — не ошибка (карта откатывается к автообнаружению). Скопируйте шаблон из `docs/examples/map_seeds/` и отредактируйте.

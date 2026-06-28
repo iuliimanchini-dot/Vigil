@@ -87,3 +87,52 @@ Being honest about the gaps:
 - The one exception is **`refactor_boundary`**: provide a refactor goal as its seed so it knows what boundary to compute.
 - Use the **summary first**, then drill into a single map with `map='<type>'` (e.g. `map='structural'`), or get everything with `view='full'`. Both views are paginated via `page=`.
 - Results are **cached on disk** under `<project>/.cortex/`; `load_code_map_by_path(path)` re-reads them without a new build.
+
+## Seeds (optional)
+
+A **seed** is a small JSON file you drop into `<project>/.cortex/map_seeds/` to *refine* a map's output. **You almost never need one** — 6 of the 8 maps work out of the box with no seed. Seeds matter for three maps:
+
+- **authority** → `authority_domains.json`. Without a seed, every write site is auto-surfaced as its own inferred per-writer domain (already useful). With a seed, writers are **grouped into named domains** by glob patterns — e.g. all config writers under one `config_writers` domain.
+- **runtime** → `runtime_seed.json`. Auto-discovery finds in-file entry points (`__main__` / async). A seed lets you **declare extra runtime nodes** that static analysis cannot see — cron jobs, externally-launched workers, `console_scripts` entry points.
+- **refactor_boundary** → `refactor_boundaries.json`. This map is essentially **seed-driven**: the seed defines the refactor *goal* and which files are allowed / watched / forbidden. Without a seed it produces no boundaries.
+
+When you'd want one: to group authority writes into domains; to declare runtime nodes the scanner can't reach; or to set a refactor goal/boundary.
+
+### Format
+
+Each seed is a JSON object with a `schema_version` and a list of entries. Ready-to-copy templates live in `docs/examples/map_seeds/`.
+
+**`authority_domains.json`** — required: `schema_version`, `domains[]`; each domain needs `authority_domain` (the domain name) and `target_file_patterns` (globs; a writer joins the domain when one of its resolved write targets matches):
+
+```json
+{
+  "schema_version": "1.0",
+  "domains": [
+    {
+      "authority_domain": "config_writers",
+      "target_file_patterns": ["config/*.json", "**/settings.py"]
+    }
+  ]
+}
+```
+
+**`runtime_seed.json`** — required: `schema_version` (must be exactly `"1.0.0"`), `nodes[]`; each node needs `node` (its name). Optional per node: `defined_in`, `kind`, `side_effects`, `depends_on_env`, `tags`, and a few more:
+
+```json
+{
+  "schema_version": "1.0.0",
+  "nodes": [
+    {
+      "node": "cron_nightly_report",
+      "defined_in": "ops/cron.py",
+      "kind": "scheduled_job"
+    }
+  ]
+}
+```
+
+(`refactor_boundaries.json` follows the same `schema_version` + `entries[]` shape, where each entry requires a `boundary_id` plus `goal` / `allowed_files` / `forbidden_files`.)
+
+### Where to put it
+
+Place the file at `<project>/.cortex/map_seeds/<name>.json` in the project you are mapping. The directory is read on every build; a missing seed is not an error (the map falls back to auto-discovery). Copy a template from `docs/examples/map_seeds/` and edit it.

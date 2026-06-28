@@ -1,0 +1,1 @@
+Copy these files into your project's `.cortex/map_seeds/` directory and edit them to match your codebase. They are optional refinements; 6 of the 8 maps work with no seed at all. See `docs/usage/code-map.en.md` (section "Seeds (optional)") for the format.

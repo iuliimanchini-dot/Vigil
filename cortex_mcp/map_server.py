@@ -39,6 +39,15 @@ WORKFLOW (background job + poll):
      or view="full" for every map (both paginated via page=).
   Also: load_code_map_by_path(path) re-reads maps built in an earlier session (no job).
 
+SEEDS (optional refinement): 6 maps need no config. Three can be refined by a JSON
+seed under <project>/.cortex/map_seeds/:
+  - authority_domains.json: group write sites into named domains (without it, each
+    writer is auto-surfaced on its own).
+  - runtime_seed.json: declare extra runtime nodes beyond auto-discovered entrypoints.
+  - refactor_boundaries.json: define the refactor goal/boundaries (refactor_boundary
+    is seed-driven and needs a goal).
+See docs/usage/code-map.* (section "Seeds") for the JSON format and templates.
+
 NOTE: output is summary-first to stay within the context budget; maps are cached on
 disk under <project>/.cortex/ so re-runs are cheap.
 """

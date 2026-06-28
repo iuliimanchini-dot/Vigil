@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "nodes": [
+    {
+      "node": "cron_nightly_report",
+      "defined_in": "ops/cron.py",
+      "kind": "scheduled_job",
+      "side_effects": ["writes report/*.csv"],
+      "depends_on_env": ["REPORT_BUCKET"],
+      "tags": ["external-scheduler"]
+    },
+    {
+      "node": "worker_entrypoint",
+      "defined_in": "workers/worker.py",
+      "kind": "background_worker"
+    }
+  ]
+}
