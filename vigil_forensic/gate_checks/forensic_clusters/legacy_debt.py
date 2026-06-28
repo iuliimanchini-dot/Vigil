@@ -140,6 +140,62 @@ def _count_substantial_functions(content: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Caller index — built ONCE per audit, O(N), replaces per-module O(N) rescans.
+# ---------------------------------------------------------------------------
+
+
+def _extract_imported_stems(content: str) -> set[str]:
+    """Return the set of module stems / top-level names this file imports.
+
+    AST-based (precise); falls back to empty on SyntaxError. Used to invert
+    the corpus into stem -> importers so unused_shim is an O(1) lookup instead
+    of an O(N) substring rescan of every other file.
+    """
+    import ast
+    stems: set[str] = set()
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return stems
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                dotted = alias.name
+                stems.add(dotted.split(".")[0])
+                stems.add(dotted.split(".")[-1])
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                stems.add(node.module.split(".")[0])
+                stems.add(node.module.split(".")[-1])
+            for alias in node.names:
+                stems.add(alias.name)
+    return stems
+
+
+def build_import_index(all_content: dict[str, str]) -> dict[str, frozenset[str]]:
+    """Invert the corpus into ``stem -> frozenset(importer_paths)`` in ONE O(N) pass.
+
+    Replaces the previous O(N^2) pattern where every shim candidate rescanned
+    the entire corpus with a substring search. Test files are kept in the index
+    (callers filter them out) so the index is reusable.
+    """
+    from collections import defaultdict
+    importers: dict[str, set[str]] = defaultdict(set)
+    for path, content in all_content.items():
+        for stem in _extract_imported_stems(content):
+            importers[stem].add(path)
+    return {stem: frozenset(paths) for stem, paths in importers.items()}
+
+
+def _is_test_path(norm_path: str) -> bool:
+    return (
+        "/test" in norm_path
+        or "\\test" in norm_path
+        or norm_path.startswith("test")
+    )
+
+
+# ---------------------------------------------------------------------------
 # Sub-check 1: forwarding_wrapper
 # ---------------------------------------------------------------------------
 
@@ -274,7 +330,7 @@ def _module_is_pure_reexport_shim(content: str) -> bool:
 def check_unused_shim_module(
     file_path: str,
     content: str,
-    all_project_files_content: dict[str, str] | None = None,
+    import_index: dict[str, frozenset[str]] | None = None,
 ) -> list[GateFinding]:
     """Detect modules whose exports have zero non-test callers in the repo.
 
@@ -282,20 +338,28 @@ def check_unused_shim_module(
     to imports, re-export assignments, `__all__`, and a docstring. Modules
     containing `def`, `class`, `if`/`while`/`try`/`with`/`for` blocks are
     canonical owners and skipped regardless of caller count.
+
+    Caller detection uses a prebuilt ``import_index`` (``stem -> importer
+    paths``) — an O(1) lookup built once per audit by ``build_import_index``,
+    replacing the previous O(N) per-module substring rescan of the whole
+    corpus (which made the whole gate O(N^2) and hung on large monorepos).
     """
     if not content.strip():
         return []
-    if all_project_files_content is None:
+    if import_index is None:
+        return []
+
+    # P4: a package __init__.py that re-exports is legitimate — real callers
+    # write ``from package import X``, never ``from package.__init__``, so an
+    # __init__ shim always *looks* like it has 0 callers. Never flag it.
+    if Path(file_path).name == "__init__.py":
         return []
 
     # F9e: skip canonical owners (anything with real module-level logic).
     if not _module_is_pure_reexport_shim(content):
         return []
 
-    # Extract module stem for import detection
     stem = Path(file_path).stem
-    # Convert file path to importable dotted form candidates
-    module_path = file_path.replace("\\", "/").replace("/", ".").removesuffix(".py")
 
     # Find symbols exported from this file (top-level defs and imports)
     exported_names: list[str] = []
@@ -314,22 +378,15 @@ def check_unused_shim_module(
     if not exported_names:
         return []
 
-    # Check if any non-test file imports from this module
-    caller_count = 0
-    for other_path, other_content in all_project_files_content.items():
-        norm_other = other_path.replace("\\", "/")
-        if norm_other == file_path.replace("\\", "/"):
-            continue
-        # Skip test files
-        if "/test" in norm_other or "\\test" in norm_other or norm_other.startswith("test"):
-            continue
-        # Check for import of this module by stem or dotted path
-        if stem in other_content and (
-            f"from {stem}" in other_content
-            or f"import {stem}" in other_content
-            or module_path in other_content
-        ):
-            caller_count += 1
+    # O(1) caller lookup: which files import this module's stem? Exclude self
+    # and test files (a shim used only by tests is still effectively dead).
+    norm_self = file_path.replace("\\", "/")
+    importers = import_index.get(stem, frozenset())
+    caller_count = sum(
+        1 for imp in importers
+        if imp.replace("\\", "/") != norm_self
+        and not _is_test_path(imp.replace("\\", "/"))
+    )
 
     if caller_count > 0:
         return []

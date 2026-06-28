@@ -280,17 +280,24 @@ def _check_legacy_compat_debt(ctx) -> list[GateFinding]:
         check_unused_shim_module,
         check_stale_migration_marker,
         check_shape_adapter_without_producer,
+        build_import_index,
     )
     all_content = {
         path: snap.text
         for path, snap in snapshots.items()
         if hasattr(snap, "text") and snap.text
     }
+    # Build the stem -> importers index ONCE in a single O(N) pass. unused_shim
+    # then does an O(1) lookup per module instead of rescanning the whole
+    # corpus (which made the gate O(N^2) and hung on large monorepos).
+    import_index = build_import_index(all_content)
     findings: list[GateFinding] = []
     for path, content in all_content.items():
         findings.extend(check_forwarding_wrapper(path, content))
-        findings.extend(check_unused_shim_module(path, content, all_content))
+        findings.extend(check_unused_shim_module(path, content, import_index))
         findings.extend(check_stale_migration_marker(path, content))
+        # shape_adapter keeps the corpus dict: its trigger pattern is rare, so
+        # the producer scan runs for almost no files (early-returns on no match).
         findings.extend(check_shape_adapter_without_producer(path, content, all_content))
         if len(findings) >= _MAX_FINDINGS_PER_CLUSTER:
             break
