@@ -170,31 +170,156 @@ class PythonAdapter(RegexAdapterBase):
         return syms
 
     # ------------------------------------------------------------------
-    # L1 stubs — existing builders remain authoritative until L3+
+    # AST helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _dotted(node: ast.AST) -> str:
+        """Return the dotted name of a Name/Attribute chain (best effort)."""
+        parts: list[str] = []
+        cur = node
+        while isinstance(cur, ast.Attribute):
+            parts.append(cur.attr)
+            cur = cur.value
+        if isinstance(cur, ast.Name):
+            parts.append(cur.id)
+        return ".".join(reversed(parts))
+
+    @staticmethod
+    def _receiver_hint(func_node: ast.AST) -> str:
+        """For an attribute call ``x.write_text(...)`` return the receiver name."""
+        if isinstance(func_node, ast.Attribute):
+            recv = func_node.value
+            if isinstance(recv, ast.Name):
+                return recv.id
+            if isinstance(recv, ast.Attribute):
+                return recv.attr
+        return ""
+
+    # ------------------------------------------------------------------
+    # Contracts: @dataclass / NamedTuple / TypedDict / pydantic.BaseModel
     # ------------------------------------------------------------------
 
     def extract_contracts(self, content: str, path: Path) -> list[ContractCandidate]:
-        """L1 stub: returns [].
+        """Detect data-contract classes via ``ast`` (parity with Go/Java/TS)."""
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return []
+        out: list[ContractCandidate] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            kind: str | None = None
+            for dec in node.decorator_list:
+                target = dec.func if isinstance(dec, ast.Call) else dec
+                if self._dotted(target).split(".")[-1] == "dataclass":
+                    kind = "dataclass"
+                    break
+            if kind is None:
+                for base in node.bases:
+                    leaf = self._dotted(base).split(".")[-1]
+                    if leaf == "BaseModel":
+                        kind = "pydantic_model"
+                        break
+                    if leaf == "TypedDict":
+                        kind = "TypedDict"
+                        break
+                    if leaf == "NamedTuple":
+                        kind = "NamedTuple"
+                        break
+            if kind:
+                out.append(ContractCandidate(
+                    name=node.name, contract_kind=kind, line=node.lineno, confidence=1.0,
+                ))
+        return out
 
-        TODO L3+: extract @dataclass, NamedTuple, TypedDict, pydantic.BaseModel
-        detection from data_contract_builder and consume ContractCandidate here.
-        """
-        return []
+    # ------------------------------------------------------------------
+    # Runtime: import-time side effects, decorator registries, env reads
+    # ------------------------------------------------------------------
+
+    _REGISTRY_DECORATORS = frozenset({
+        "route", "register", "task", "command", "on_event",
+        "get", "post", "put", "delete", "fixture", "app",
+    })
 
     def extract_runtime(self, content: str, path: Path) -> list[RuntimeSignal]:
-        """L1 stub: returns [].
+        """Detect import-time side effects / decorator registries / env reads via ``ast``."""
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return []
+        out: list[RuntimeSignal] = []
+        # module-level bare calls = import-time side effects
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                fname = self._dotted(stmt.value.func)
+                out.append(RuntimeSignal(
+                    signal_kind="import_time_side_effects",
+                    detail=f"module-level call {fname}()",
+                    line=stmt.lineno, confidence=0.8,
+                ))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                fn = self._dotted(node.func)
+                if fn in ("os.getenv",) or fn.endswith("environ.get") or fn.endswith("os.environ"):
+                    out.append(RuntimeSignal(
+                        signal_kind="env_var_read", detail=fn,
+                        line=int(getattr(node, "lineno", 0) or 0), confidence=0.9,
+                    ))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for dec in node.decorator_list:
+                    target = dec.func if isinstance(dec, ast.Call) else dec
+                    dn = self._dotted(target)
+                    if dn.split(".")[-1] in self._REGISTRY_DECORATORS:
+                        out.append(RuntimeSignal(
+                            signal_kind="decorator_registry",
+                            detail=f"@{dn} on {node.name}",
+                            line=node.lineno, confidence=0.7,
+                        ))
+        return out
 
-        TODO L3+: extract import-time side effects, decorator registries, and
-        background task patterns from _runtime_ast and emit RuntimeSignal here.
-        """
-        return []
+    # ------------------------------------------------------------------
+    # Authority writes: .write_text/.write_bytes/.save/json.dump/open("w")
+    # ------------------------------------------------------------------
 
     def extract_writer_calls(
         self, content: str, path: Path
     ) -> list[AuthorityWriteCandidate]:
-        """L1 stub: returns [].
-
-        TODO L3+: extract .write_text, .write_bytes, .save, json.dump, open("w")
-        patterns from authority_builder and emit AuthorityWriteCandidate here.
-        """
-        return []
+        """Detect write/save operations via ``ast`` (parity with other adapters)."""
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return []
+        out: list[AuthorityWriteCandidate] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = self._dotted(node.func)
+            leaf = fn.split(".")[-1]
+            ln = int(getattr(node, "lineno", 0) or 0)
+            if leaf in ("write_text", "write_bytes"):
+                out.append(AuthorityWriteCandidate(
+                    write_kind=leaf, target_hint=self._receiver_hint(node.func),
+                    line=ln, confidence=0.9,
+                ))
+            elif leaf == "save":
+                out.append(AuthorityWriteCandidate(
+                    write_kind="save", target_hint=self._receiver_hint(node.func),
+                    line=ln, confidence=0.7,
+                ))
+            elif fn in ("json.dump",):
+                out.append(AuthorityWriteCandidate(
+                    write_kind="json_dump", target_hint="", line=ln, confidence=0.9,
+                ))
+            elif leaf == "open" and len(node.args) >= 2:
+                mode = node.args[1]
+                if (
+                    isinstance(mode, ast.Constant)
+                    and isinstance(mode.value, str)
+                    and any(c in mode.value for c in "wax+")
+                ):
+                    out.append(AuthorityWriteCandidate(
+                        write_kind="open_write", target_hint="", line=ln, confidence=0.8,
+                    ))
+        return out
