@@ -204,6 +204,90 @@ def _build_map_summary(maps_data: dict) -> dict:
     }
 
 
+_BRIEF_TOP = 6
+
+
+def _build_agent_brief(maps_data: dict) -> dict:
+    """Synthesise an AGENT-FACING briefing from repo maps (not a human report).
+
+    Distils the maps into the few facts an agent needs BEFORE editing a repo:
+    entry points, state write-sites (check before editing), riskiest files,
+    conflicts to watch, and a suggested read order. Returns a markdown ``brief``
+    plus the structured ``signals`` it was built from. Built purely from the
+    already-computed maps (no new analysis).
+    """
+    def _entries(map_type: str, sort_metric: str | None = None) -> list[dict]:
+        out = [
+            c for c in (_compact_map_entry(e) for e in (maps_data.get(map_type) or []))
+            if c.get("name") or c.get("file")
+        ]
+        if sort_metric:
+            out.sort(key=lambda c: c.get(sort_metric) or 0, reverse=True)
+        return out[:_BRIEF_TOP]
+
+    entrypoints = _entries("runtime")
+    writers = _entries("authority")
+    hotspots = _entries("hotspot", sort_metric="hotspot_score")
+    conflicts = _entries("conflict")
+
+    def _fmt(c: dict) -> str:
+        loc = c.get("file") or ""
+        nm = c.get("name") or loc or "?"
+        metric = ""
+        for m in ("hotspot_score", "severity", "complexity", "size"):
+            if c.get(m) is not None:
+                metric = f" ({m}={c[m]})"
+                break
+        tail = f" — {loc}" if loc and loc != nm else ""
+        return f"{nm}{tail}{metric}"
+
+    read_order: list[str] = []
+    seen: set[str] = set()
+    for c in entrypoints + hotspots:
+        f = c.get("file") or c.get("name")
+        if f and f not in seen:
+            seen.add(f)
+            read_order.append(f)
+
+    lines = ["# Agent briefing — read before editing this repo", ""]
+    if entrypoints:
+        lines.append("## Entry points (where execution starts)")
+        lines += [f"- {_fmt(c)}" for c in entrypoints]
+        lines.append("")
+    if writers:
+        lines.append("## State write-sites (check these before editing related code)")
+        lines += [f"- {_fmt(c)}" for c in writers]
+        lines.append("")
+    if hotspots:
+        lines.append("## Riskiest / most complex files (touch carefully)")
+        lines += [f"- {_fmt(c)}" for c in hotspots]
+        lines.append("")
+    if conflicts:
+        lines.append("## Watch-outs (conflicts detected)")
+        lines += [f"- {_fmt(c)}" for c in conflicts]
+        lines.append("")
+    if read_order:
+        lines.append("## Suggested read order (entry points, then riskiest files)")
+        lines += [f"{i + 1}. {f}" for i, f in enumerate(read_order)]
+        lines.append("")
+    if len(lines) <= 2:
+        lines.append(
+            "_No structural signals surfaced — small, empty, or unsupported codebase._"
+        )
+
+    return {
+        "brief": "\n".join(lines).rstrip() + "\n",
+        "signals": {
+            "entrypoints": entrypoints,
+            "write_sites": writers,
+            "hotspots": hotspots,
+            "conflicts": conflicts,
+            "suggested_read_order": read_order,
+        },
+        "schema_version": maps_data.get("schema_version", "unknown"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Internal: path-preserving wrapper around run_map_build
 # ---------------------------------------------------------------------------
@@ -318,10 +402,13 @@ def get_code_map_results(
       * ``map='<type>'`` - every entry of a single map (e.g. 'structural'),
         paginated.  Takes precedence over ``view``.
       * ``view='full'`` - every entry of every map, paginated.
+      * ``view='brief'`` - an agent-facing briefing synthesised from the maps
+        (entry points, state write-sites, riskiest files, conflicts, and a
+        suggested read order). Compact; ideal to hand an agent BEFORE it edits.
 
     Args:
         job_id:          Job ID returned by start_code_map.
-        view:            "summary" (default) or "full".
+        view:            "summary" (default), "full", or "brief".
         map:             A single map type to return in full (e.g.
                          "structural").  Empty = honour ``view``.
         page:            Zero-based page index (each page ≈ page_size_chars chars).
@@ -393,6 +480,9 @@ def get_code_map_results(
     elif view == "full":
         rendered_maps = maps_data
         effective_view = "full"
+    elif view == "brief":
+        rendered_maps = _build_agent_brief(maps_data)
+        effective_view = "brief"
     else:
         rendered_maps = _build_map_summary(maps_data)
         effective_view = "summary"
