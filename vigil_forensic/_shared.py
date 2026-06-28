@@ -343,6 +343,7 @@ class GateCategory(str, Enum):
     TOOL_HOOK_COVERAGE = "tool_hook_coverage"
     META = "meta_integrity"
     OBSERVABILITY = "observability"
+    ML = "ml_correctness"
 
 
 @dataclass(frozen=True)

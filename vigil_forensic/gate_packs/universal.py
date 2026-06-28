@@ -55,6 +55,7 @@ from vigil_forensic.gate_checks.stuck_feature_flag_checks import run_stuck_featu
 from vigil_forensic.gate_checks.hunter_artifact_completeness_check import run_hunter_artifact_completeness_checks
 from vigil_forensic.gate_checks.export_completeness_checks import run_export_completeness_checks
 from vigil_forensic.gate_checks.imports_in_function_checks import run_imports_in_function_checks
+from vigil_forensic.gate_checks.ml_checks import run_ml_checks
 from vigil_forensic.meta_findings import meta_runner_stub
 from vigil_forensic._shared import GateCategory
 
@@ -161,6 +162,12 @@ GATE_SPECS: tuple[tuple[str, GateCategory, Any], ...] = (
     ("export_completeness", GateCategory.CONTRACT, run_export_completeness_checks),
     ("imports_in_function", GateCategory.DRIFT, run_imports_in_function_checks),
     ("imports_in_function.stdlib", GateCategory.DRIFT, run_imports_in_function_checks),
+    # ML/NN correctness pack (static AST; look-ahead, leakage, seed)
+    ("ml_checks", GateCategory.ML, run_ml_checks),
+    ("ml.lookahead_negative_shift", GateCategory.ML, run_ml_checks),
+    ("ml.nondeterministic_split", GateCategory.ML, run_ml_checks),
+    ("ml.scaler_fit_on_test", GateCategory.ML, run_ml_checks),
+    ("ml.missing_random_seed", GateCategory.ML, run_ml_checks),
     # meta stubs (FOC gates removed)
     ("meta.syntax_parse_error", GateCategory.META, meta_runner_stub),
     ("meta.profile_load_failed", GateCategory.META, meta_runner_stub),
