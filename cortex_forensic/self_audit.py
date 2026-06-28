@@ -88,6 +88,14 @@ def _is_self_match_finding(finding: GateFinding) -> bool:
 _DEFAULT_EXCLUDE_DIRS = frozenset({
     "__pycache__", ".git", ".venv", "venv", ".cortex", "node_modules",
     "libs", ".pytest_cache", "build", "dist", ".mypy_cache", ".ruff_cache", ".tox",
+    # Vendored / build-output dirs that can appear OUTSIDE a venv (e.g. a repo
+    # that ships a checked-in dependency tree). Excluded so the file-count guard
+    # and the gate walk never spend time on third-party code.
+    "site-packages", "dist-packages", ".eggs", ".next",
+    # Tool / agent config dirs — never project source, and (e.g. .claude) can
+    # hold thousands of files (worktrees, plans, memory). Mirrors the code-map
+    # exclusion set so both tools agree on what "project source" means.
+    ".claude", ".codex", ".prompt-engineer", ".a1",
 })
 
 
@@ -95,21 +103,35 @@ def discover_source_files(
     project_dir: Path,
     exclude_dirs: frozenset[str] = _DEFAULT_EXCLUDE_DIRS,
 ) -> list[str]:
-    """Return sorted list of relative source-file paths under project_dir."""
+    """Return sorted list of relative source-file paths under project_dir.
+
+    Uses ``os.walk`` with ``topdown=True`` and PRUNES excluded directories from
+    ``dirnames`` in place so the walk never descends into them. This is both a
+    correctness and a performance fix: the previous ``rglob('*')`` walked INTO
+    excluded trees (e.g. a 7000-file ``.claude``) and only filtered afterward,
+    which dominated the runtime on large repos and made the anti-hang file-count
+    guard itself slow.
+    """
+    import os
     from cortex_forensic.source_analysis import is_source_file
+
+    project_dir = project_dir.resolve()
     src_files: list[str] = []
-    for path in project_dir.rglob("*"):
-        if not path.is_file():
-            continue
-        try:
-            rel = path.relative_to(project_dir)
-        except ValueError:
-            continue
-        if any(part in exclude_dirs for part in rel.parts):
-            continue
-        rel_str = str(rel).replace("\\", "/")
-        if is_source_file(rel_str):
-            src_files.append(rel_str)
+    for dirpath_str, dirnames, filenames in os.walk(str(project_dir), topdown=True):
+        # Prune excluded dirs in place — os.walk will not descend into them.
+        dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
+        dirpath = Path(dirpath_str)
+        for fname in filenames:
+            full = dirpath / fname
+            if not full.is_file():
+                continue
+            try:
+                rel = full.relative_to(project_dir)
+            except ValueError:
+                continue
+            rel_str = str(rel).replace("\\", "/")
+            if is_source_file(rel_str):
+                src_files.append(rel_str)
     return sorted(src_files)
 
 

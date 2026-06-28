@@ -128,6 +128,13 @@ _DEFAULT_EXCLUSIONS: frozenset[str] = frozenset({
     ".pytest_cache",
     ".mypy_cache",
     ".ruff_cache",
+    # Vendored / build-output dirs that can appear OUTSIDE a venv (checked-in
+    # dependency trees, packaging artifacts). Excluded so the file-count guard
+    # and the map build never spend time on third-party code.
+    "site-packages",
+    "dist-packages",
+    ".eggs",
+    ".next",
     # Don't scan map outputs or seeds themselves
     ".cortex",
     # Exclude tool/agent config directories

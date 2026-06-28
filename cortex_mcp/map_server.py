@@ -48,6 +48,11 @@ seed under <project>/.cortex/map_seeds/:
     is seed-driven and needs a goal).
 See docs/usage/code-map.* (section "Seeds") for the JSON format and templates.
 
+HUGE REPOS (anti-hang): if the collected file count exceeds max_files (default 800),
+the build is SKIPPED and get_code_map_results returns skipped_reason="too_many_files"
+with top_subdirs + a suggestion - build a submodule (start_code_map(path='<dir>/<subdir>'))
+or pass a larger max_files to force a full build.
+
 NOTE: output is summary-first to stay within the context budget; maps are cached on
 disk under <project>/.cortex/ so re-runs are cheap.
 """
@@ -203,11 +208,41 @@ def _build_map_summary(maps_data: dict) -> dict:
 # Internal: path-preserving wrapper around run_map_build
 # ---------------------------------------------------------------------------
 
-def _run_map_build_with_path(path: str, map: str = "all") -> dict:
+def _run_map_build_with_path(path: str, map: str = "all", max_files: int = 800) -> dict:
     """Run the map build and bundle the project path into the return value
     so that get_code_map_results can call load_repo_maps without extra args.
+
+    Anti-hang file-COUNT guard (mirrors the forensic guard): the map build does
+    per-file AST/tree-sitter work that scales with file count, so a repo with
+    thousands of files can hang the machine. ``run_map_build`` returns a bare int
+    exit code, so the guard is threaded HERE (the MCP wrapper that already
+    returns a dict consumed by ``get_code_map_results``) rather than mutating
+    that int contract. When the collected source-file count exceeds ``max_files``
+    we do NOT build maps; we return a FAST structured ``too_many_files`` dict
+    (count + top sub-dirs + a suggestion to narrow scope).
     """
-    exit_code = run_map_build(Path(path), map=map, timeout_s=300)
+    from cortex_map_builder.map_common import iter_source_files
+    from cortex_map_builder._file_count_guard import build_too_many_files_meta
+
+    project_dir = Path(path)
+    # Cheap pass: collect the same source files the build would, but only to
+    # COUNT + group by top-level sub-dir. No parsing happens here.
+    root = project_dir.resolve()
+    rel_paths: list[str] = []
+    for f in iter_source_files(project_dir):
+        try:
+            rel_paths.append(f.resolve().relative_to(root).as_posix())
+        except ValueError:
+            rel_paths.append(f.name)
+
+    if len(rel_paths) > max_files:
+        meta = build_too_many_files_meta(
+            rel_paths, max_files, entry_call="start_code_map"
+        )
+        # exit_code 0: skipping is a controlled outcome, not an error.
+        return {"exit_code": 0, "_path": path, **meta}
+
+    exit_code = run_map_build(project_dir, map=map, timeout_s=300)
     return {"exit_code": exit_code, "_path": path}
 
 
@@ -216,7 +251,7 @@ def _run_map_build_with_path(path: str, map: str = "all") -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def start_code_map(path: str = "", map: str = "all") -> dict:
+def start_code_map(path: str = "", map: str = "all", max_files: int = 800) -> dict:
     """Start a background code-map build job for the given project path.
 
     Args:
@@ -227,6 +262,11 @@ def start_code_map(path: str = "", map: str = "all") -> dict:
               directory is returned as ``resolved_path``.
         map:  Map type to build - "all" (default) or a specific map name
               recognised by cortex_map_builder (e.g. "structural").
+        max_files: Anti-hang ceiling on the collected source-file count
+              (default 800).  Above it the build is SKIPPED and
+              get_code_map_results reports skipped_reason="too_many_files" with
+              top_subdirs + a suggestion to scan a submodule; raise it to force
+              a full build of a huge repo.
 
     Returns:
         {"job_id": str | None, "status": "running" | "busy",
@@ -242,7 +282,8 @@ def start_code_map(path: str = "", map: str = "all") -> dict:
     # project_dir enables disk-backed persistence so results survive a server
     # restart; get_code_map_status/results then resolve by job_id from disk.
     started = _jobs.start(
-        _run_map_build_with_path, resolved_path, map=map, project_dir=resolved_path
+        _run_map_build_with_path, resolved_path, map=map, max_files=max_files,
+        project_dir=resolved_path,
     )
     started["resolved_path"] = resolved_path
     return started
@@ -313,6 +354,24 @@ def get_code_map_results(
     inner = r.get("result") or {}
     exit_code = inner.get("exit_code") if isinstance(inner, dict) else inner
     path_str = inner.get("_path") if isinstance(inner, dict) else None
+
+    # Anti-hang guard fired: the build was skipped because the repo has too many
+    # files. Surface the structured skip (no maps were built) instead of an
+    # empty/"missing" maps payload, so the caller learns to narrow scope.
+    if isinstance(inner, dict) and inner.get("skipped_reason") == "too_many_files":
+        skip_payload = {
+            "exit_code": exit_code,
+            "skipped_reason": inner.get("skipped_reason"),
+            "file_count": inner.get("file_count"),
+            "max_files": inner.get("max_files"),
+            "top_subdirs": inner.get("top_subdirs"),
+            "suggestion": inner.get("suggestion"),
+        }
+        page_data = _paginate_json(skip_payload, page=page, page_size_chars=page_size_chars)
+        return {
+            "job_id": job_id, "status": "done", "view": "skipped",
+            "exit_code": exit_code, **page_data,
+        }
 
     if path_str:
         try:

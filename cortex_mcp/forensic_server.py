@@ -44,6 +44,11 @@ INTERPRETING: exit_code 0 = clean, 1 = high/critical findings exist, 2 = error.
 Triage HIGH first. On clean third-party code most findings are size.* (large files)
 and broad_except (real `except: pass` swallows).
 
+HUGE REPOS (anti-hang): if the collected file count exceeds max_files (default 800),
+the audit is SKIPPED and the result has meta.skipped_reason="too_many_files" with
+top_subdirs + a suggestion - scan a submodule (start_forensic_audit(path='<dir>/<subdir>'))
+or pass a larger max_files to force a full scan.
+
 TUNING (enable / disable checks):
   - DISABLE noisy gates for a project: create <project>/.cortex/disabled_gates.json
     = ["gate_id", ...]; those gates never run (reported in meta.gates_skipped).
@@ -231,6 +236,7 @@ def start_forensic_audit(
     gates: str = "",
     severity: str = "LOW",
     all_languages: bool = True,
+    max_files: int = 800,
 ) -> dict:
     """Start a background forensic audit job for the given project path.
 
@@ -245,6 +251,12 @@ def start_forensic_audit(
                        Empty string means run all applicable gates.
         severity:      Minimum severity to include: LOW | MEDIUM | HIGH | CRITICAL.
         all_languages: Reserved; currently always True.
+        max_files:     Anti-hang ceiling on the collected source-file count
+                       (default 800).  Above it the audit is SKIPPED (gates do
+                       NOT run) and get_forensic_results reports
+                       meta.skipped_reason="too_many_files" with top_subdirs +
+                       a suggestion to scan a submodule; raise it to force a full
+                       scan of a huge repo.
 
     Returns:
         {"job_id": str | None, "status": "running" | "busy",
@@ -271,6 +283,7 @@ def start_forensic_audit(
             gates=gates_list,
             severity=severity,
             all_languages=all_languages,
+            max_files=max_files,
         )
 
     # project_dir enables disk-backed persistence so results survive a server

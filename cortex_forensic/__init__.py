@@ -58,6 +58,7 @@ def run_forensic_audit(
     gates: Optional[list[str]] = None,
     severity: str = "LOW",
     all_languages: bool = True,
+    max_files: int = 800,
     cancel_event: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Run static forensic gates on *project_dir* and return structured findings.
@@ -83,6 +84,14 @@ def run_forensic_audit(
     all_languages:
         Reserved for future use. Currently all source extensions recognized by
         cortex_map_builder.source_adapters are included automatically.
+    max_files:
+        Anti-hang ceiling on the COLLECTED source-file count. Forensic does a
+        per-gate AST walk over every file (~0.4 s/file), so on a repo with
+        thousands of files a full scan takes hours and effectively hangs. When
+        the collected count exceeds ``max_files`` (default 800 ≈ a ~5 min
+        ceiling) NO gates run; instead a FAST structured result is returned with
+        ``meta["skipped_reason"] == "too_many_files"`` plus ``top_subdirs`` and a
+        ``suggestion`` to narrow scope. Raise ``max_files`` to force a full scan.
 
     Returns
     -------
@@ -141,6 +150,24 @@ def run_forensic_audit(
                 "gates_skipped_in_static": [],
                 "note": "no source files found",
             },
+            "errors": [],
+        }
+
+    # Anti-hang file-COUNT guard. Forensic walks every file per gate (~0.4 s/file)
+    # so thousands of files = hours. When the collected count exceeds max_files we
+    # do NOT build context or run gates; we return a FAST structured skip result
+    # (just count + group-by-top-subdir) telling the caller to narrow scope.
+    if len(source_files) > max_files:
+        from cortex_map_builder._file_count_guard import build_too_many_files_meta
+
+        meta = build_too_many_files_meta(
+            source_files, max_files, entry_call="start_forensic_audit"
+        )
+        meta["project_dir"] = str(project_dir)
+        return {
+            "exit_code": 0,
+            "findings": [],
+            "meta": meta,
             "errors": [],
         }
 

@@ -177,6 +177,7 @@ The same three-step pattern applies to `forensic-audit`: `start_forensic_audit` 
 - Jobs are **cancellable** at any time via `cancel_code_map` / `cancel_forensic_audit`.
 - Output is **paginated and capped**: each results page is at most 80 000 chars (~25 k tokens); findings are capped at 200 per `get_forensic_results` call by default.
 - Map analysis is **incremental**: tree-sitter parses file-by-file; `run_map_build` has a 300 s time budget and writes each map independently — the server will not hang the host process.
+- **File-count guard (anti-hang on huge repos).** Both tools do per-file AST work (forensic averages ~0.4 s/file), so a repo with thousands of files would take *hours*. When the collected source-file count exceeds **`max_files` (default 800 ≈ a ~5 min ceiling)** the tool **does not scan** — it returns a fast structured skip instead: forensic sets `meta.skipped_reason="too_many_files"` (with `file_count`, `max_files`, `top_subdirs`, `suggestion`); code-map surfaces the same via `get_code_map_results` (`view="skipped"`). Pass `max_files=` to `start_forensic_audit` / `start_code_map` to narrow scope or raise the ceiling to force a full scan of a submodule. Vendored/build dirs (`.venv`, `site-packages`, `dist-packages`, `node_modules`, `build`, `dist`, `.tox`, `.eggs`, `.mypy_cache`, `.pytest_cache`, `.next`, …) are excluded from the count and the scan even when they sit outside a venv.
 
 ---
 
