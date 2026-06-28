@@ -82,12 +82,15 @@ class RSSSampler:
 def _copy_package(name: str, dest_root: Path) -> Path:
     """Copy a site-packages package into dest_root/<name>, sans __pycache__.
 
-    Also drops the repo's shipped default ``gate_profile.json`` INTO the copied
-    target dir so the forensic audit resolves the *default profile* (file_warn
-    750 / file_revise 1000 / nesting_warn 5), not the stricter hardcoded code
-    fallback (600/800/4).  Without this the temp dir has no ancestor profile and
-    the audit would silently run stricter-than-shipped thresholds.
+    Also drops the package's shipped default ``gate_profile.json`` INTO the
+    copied target dir so the forensic audit resolves the *default profile*
+    (file_warn 750 / file_revise 1000 / nesting_warn 5) via resolution step 1,
+    not the stricter hardcoded code fallback (600/800/4). The shipped profile now
+    lives INSIDE the cortex_forensic package, so it is sourced via the canonical
+    resolver rather than a repo-root path (which no longer exists post-install).
     """
+    from cortex_forensic.self_audit import _packaged_gate_profile_path
+
     src = SITE / name
     if not src.is_dir():
         raise SystemExit(f"target package not found: {src}")
@@ -97,7 +100,10 @@ def _copy_package(name: str, dest_root: Path) -> Path:
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     # Activate the shipped default profile for this target (resolution step 1).
-    shutil.copy2(REPO / "gate_profile.json", dst / "gate_profile.json")
+    shipped = _packaged_gate_profile_path()
+    if shipped is None:
+        raise SystemExit("packaged gate_profile.json not found via _packaged_gate_profile_path()")
+    shutil.copy2(shipped, dst / "gate_profile.json")
     return dst
 
 

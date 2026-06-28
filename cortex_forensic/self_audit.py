@@ -345,8 +345,9 @@ def _load_gate_profile_if_present(project_dir: Path) -> "Optional[Any]":
     #    an external target (e.g. an arbitrary path with no ancestor profile)
     #    silently fell back to the STRICT code-default thresholds (600/800/4)
     #    instead of the shipped, documented defaults (750/1000/5). The shipped
-    #    profile is the effective default for every target. Located relative to
-    #    this module (repo root == parent of the cortex_forensic package).
+    #    profile is the effective default for every target. Located INSIDE the
+    #    cortex_forensic package so it ships in the wheel (see
+    #    _packaged_gate_profile_path).
     packaged = _packaged_gate_profile_path()
     if packaged is not None and packaged.is_file():
         result = _try_load(packaged)
@@ -359,14 +360,16 @@ def _load_gate_profile_if_present(project_dir: Path) -> "Optional[Any]":
 def _packaged_gate_profile_path() -> "Optional[Path]":
     """Return the path to the package's shipped ``gate_profile.json``.
 
-    The default profile ships at the repo root, one directory above the
-    ``cortex_forensic`` package (i.e. next to ``pyproject.toml``). Resolved
-    relative to this module so it works regardless of the caller's cwd or the
-    audit target location. Returns None if the file cannot be located.
+    The default profile ships INSIDE the ``cortex_forensic`` package (next to
+    this module) so it is included in the wheel/sdist via
+    ``[tool.setuptools.package-data]`` and is therefore available after a plain
+    ``pip install`` — there is no repo root at install time. Resolved relative
+    to this module so it works regardless of the caller's cwd or the audit
+    target location. Returns None if the file cannot be located.
     """
     here = Path(__file__).resolve()
-    # here == <repo>/cortex_forensic/self_audit.py → <repo>/gate_profile.json
-    candidate = here.parent.parent / "gate_profile.json"
+    # here == .../cortex_forensic/self_audit.py → .../cortex_forensic/gate_profile.json
+    candidate = here.parent / "gate_profile.json"
     return candidate if candidate.is_file() else None
 
 

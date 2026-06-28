@@ -7,6 +7,20 @@ name = "cortex-codeintel"
 version = "0.1.0"
 description = "Multi-language code intelligence: structural mapper, forensic gate auditor, and two FastMCP stdio servers"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Julio"}]
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Quality Assurance",
+    "Intended Audience :: Developers",
+    "Development Status :: 4 - Beta",
+]
 dependencies = [
     "tree-sitter>=0.25,<0.26",
     "tree-sitter-language-pack>=1.10",
@@ -23,14 +37,9 @@ dev = [
 cortex-map-mcp = "cortex_mcp.map_server:main"
 cortex-forensic-mcp = "cortex_mcp.forensic_server:main"
 
-[tool.setuptools]
-packages = [
-    "cortex_map_builder",
-    "cortex_map_builder.source_adapters",
-    "cortex_forensic",
-    "cortex_forensic.gate_checks",
-    "cortex_forensic.gate_checks.forensic_clusters",
-    "cortex_forensic.gate_checks.forensic_cluster_runners",
-    "cortex_forensic.gate_packs",
-    "cortex_mcp",
-]
+[tool.setuptools.packages.find]
+include = ["cortex_map_builder*", "cortex_forensic*", "cortex_mcp*"]
+exclude = ["tests*", "docs*"]
+
+[tool.setuptools.package-data]
+cortex_forensic = ["*.json"]

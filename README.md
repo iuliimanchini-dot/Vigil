@@ -223,7 +223,9 @@ The default delivery mode for both servers is **poll** (the client calls `get_*_
 ## Default gate profile (size-noise control)
 
 The forensic auditor reads size/complexity thresholds from a **gate profile**. A
-default profile ships at the repo root: [`gate_profile.json`](gate_profile.json).
+default profile ships **inside the package** (so it is bundled in the wheel and
+available after `pip install`):
+[`cortex_forensic/gate_profile.json`](cortex_forensic/gate_profile.json).
 Its only job is to cut **size-noise false-positives** — file-length,
 function-length, and nesting-depth warnings firing on legitimately large code —
 *without* hiding genuinely extreme outliers (a 2 000-line god-file still
@@ -236,19 +238,24 @@ surfaces).
 1. `<audit-target>/gate_profile.json`
 2. `<audit-target>/.cortex/gate_profile.json`
 3. **ancestor walk** — the first `gate_profile.json` found in any parent
-   directory of the audit target (so a sub-package audit such as
-   `run_forensic_audit("cortex_forensic")` still picks up the repo-root default).
+   directory of the audit target.
+4. **packaged default** — the profile shipped inside the `cortex_forensic`
+   package. This is the effective default for any target with no profile of its
+   own and no ancestor profile (e.g. an arbitrary path audited after
+   `pip install`), and is why a sub-package audit such as
+   `run_forensic_audit("cortex_forensic")` still picks up the shipped default.
 
-A target-local profile always wins over an ancestor one. A missing or malformed
-profile is logged and skipped — never fatal. `.cortex/` is git-ignored, so the
-**committed** default lives at the repo root.
+A target-local profile always wins over an ancestor or the packaged default. A
+missing or malformed profile is logged and skipped — never fatal. The
+**committed** default lives inside the package at `cortex_forensic/gate_profile.json`
+so it ships in the wheel.
 
 ### How to set your own
 
 Copy the shipped file to your project root and edit `size_thresholds`:
 
 ```bash
-cp gate_profile.json /path/to/your-project/gate_profile.json
+cp cortex_forensic/gate_profile.json /path/to/your-project/gate_profile.json
 # then edit size_thresholds to taste
 ```
 
@@ -385,8 +392,9 @@ items 6–7 in [`tests/test_dup_and_sqli.py`](tests/test_dup_and_sqli.py)):
    `gate_profile.json` previously fell back to the *strict* code-defaults
    (600/800/4) instead of the shipped defaults (750/1000/5). The loader
    (`self_audit._load_gate_profile_if_present`) now falls back to the package's
-   **own shipped** `gate_profile.json` (resolved relative to the package, at the
-   repo root) as the last resort. A target-local profile still wins.
+   **own shipped** `gate_profile.json` (bundled INSIDE the `cortex_forensic`
+   package and resolved relative to the module, so it ships in the wheel) as the
+   last resort. A target-local profile still wins.
 6. **`duplicate_scan` (near-duplicate code) per-line inflation.** The
    intra-file near-duplicate detector (`assess_near_duplicate_code`) hashes a
    sliding 4-line window, so one duplicated region of N lines emitted N−3

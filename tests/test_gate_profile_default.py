@@ -1,11 +1,11 @@
 """Tests for the default forensic gate profile (size-noise FP control).
 
 Covers (G4):
-  1. The shipped repo-root ``gate_profile.json`` exists, is valid JSON, loads
-     via the real loader, and carries the documented industry-standard
-     thresholds.
-  2. Ancestor-walk fallback: a sub-package audit discovers the repo-root
-     default profile.
+  1. The shipped ``gate_profile.json`` ships INSIDE the cortex_forensic package
+     (so it is included in the wheel), is valid JSON, loads via the real loader,
+     and carries the documented industry-standard thresholds.
+  2. Ancestor-walk fallback: a target with no co-located profile discovers an
+     ancestor default profile.
   3. Precedence: a target-local profile wins over an ancestor profile.
   4. Behavior: the profile silences NOISE (moderately-large code) but still
      surfaces genuinely-extreme outliers.
@@ -35,7 +35,10 @@ _EXPECTED_THRESHOLDS = {
 }
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_SHIPPED_PROFILE = _REPO_ROOT / "gate_profile.json"
+# The default profile ships INSIDE the package so it is bundled in the wheel
+# (repo root is not present after `pip install`). Mirrors
+# self_audit._packaged_gate_profile_path().
+_SHIPPED_PROFILE = _REPO_ROOT / "cortex_forensic" / "gate_profile.json"
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +92,23 @@ def _run_size_checks_with_thresholds(tmp_path: Path, source_files, thresholds):
 class TestShippedDefaultProfile:
     def test_shipped_profile_file_exists(self):
         assert _SHIPPED_PROFILE.is_file(), (
-            f"Default gate profile must ship at repo root: {_SHIPPED_PROFILE}"
+            f"Default gate profile must ship inside the package "
+            f"(bundled in the wheel): {_SHIPPED_PROFILE}"
+        )
+
+    def test_shipped_profile_is_inside_package(self):
+        """The profile must live next to self_audit.py so package-data ships it
+        in the wheel and _packaged_gate_profile_path() can find it post-install."""
+        from cortex_forensic.self_audit import _packaged_gate_profile_path
+        packaged = _packaged_gate_profile_path()
+        assert packaged is not None and packaged.is_file(), (
+            "_packaged_gate_profile_path() must resolve the in-package profile"
+        )
+        assert packaged.resolve() == _SHIPPED_PROFILE.resolve()
+        import cortex_forensic
+        pkg_dir = Path(cortex_forensic.__file__).resolve().parent
+        assert packaged.resolve().parent == pkg_dir, (
+            "profile must be co-located with the cortex_forensic package"
         )
 
     def test_shipped_profile_is_valid_json(self):
@@ -117,17 +136,35 @@ class TestShippedDefaultProfile:
 # ---------------------------------------------------------------------------
 
 class TestAncestorWalkFallback:
-    def test_subpackage_audit_picks_up_root_profile(self):
-        """run_forensic_audit('cortex_forensic') has no co-located profile, so
-        the loader must walk up and find the repo-root default."""
+    def test_subpackage_audit_resolves_inpackage_profile(self):
+        """Auditing the cortex_forensic package itself must resolve the shipped
+        default profile. The profile is now co-located INSIDE the package, so it
+        is picked up directly (candidate step 1), proving the in-package copy is
+        the effective default for a sub-package target."""
         target = _REPO_ROOT / "cortex_forensic"
-        assert not (target / "gate_profile.json").is_file(), (
-            "test assumes no profile is co-located in cortex_forensic/"
+        assert (target / "gate_profile.json").is_file(), (
+            "the default profile must be co-located inside cortex_forensic/"
         )
         profile = _load_gate_profile_if_present(target)
-        assert profile is not None, "ancestor-walk must find the repo-root profile"
+        assert profile is not None, "loader must find the in-package profile"
         assert profile.profile_name == "cortex-default"
         assert Path(profile.profile_path).resolve() == _SHIPPED_PROFILE.resolve()
+
+    def test_ancestor_walk_finds_default_for_subdir_without_profile(self, tmp_path):
+        """A target dir with no co-located profile, nested under an ancestor that
+        DOES have one, must discover the ancestor profile via the upward walk."""
+        ancestor = tmp_path / "repo"
+        ancestor.mkdir()
+        (ancestor / "gate_profile.json").write_text(
+            json.dumps({"profile_name": "ancestor-default", "version": "1.0"}),
+            encoding="utf-8",
+        )
+        target = ancestor / "pkg" / "sub"
+        target.mkdir(parents=True)
+        assert not (target / "gate_profile.json").is_file()
+        profile = _load_gate_profile_if_present(target)
+        assert profile is not None, "ancestor-walk must find the ancestor profile"
+        assert profile.profile_name == "ancestor-default"
 
     def test_no_profile_anywhere_falls_back_to_packaged_default(self, tmp_path):
         """An isolated tmp dir with no profile in any ancestor falls back to the

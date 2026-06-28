@@ -11,5 +11,10 @@ build/
 # forensic/map self-audit cache
 .cortex/
 
+# agent / tool working dirs (must never ship)
+.prompt-engineer/
+.codex/
+.a1/
+
 # generated benchmark artifact (regenerate via tests/benchmark_realworld.py)
 tests/_benchmark_results.json
