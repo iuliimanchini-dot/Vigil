@@ -24,15 +24,15 @@ The table below reflects the actual `supports_*` flags and implementation state 
 
 | Language | Structural (imports + symbols) | Contracts | Runtime signals | Authority writes |
 |----------|-------------------------------|-----------|-----------------|------------------|
-| **Python** | yes — stdlib `ast`, fully implemented | flag set; stubs return `[]` (L3+ wiring not done) | flag set; stubs return `[]` (L3+ wiring not done) | flag set; stubs return `[]` (L3+ wiring not done) |
+| **Python** | yes — stdlib `ast`, fully implemented | yes — `ast`: `@dataclass`, pydantic `BaseModel`, `TypedDict`, `NamedTuple` | yes — `ast`: import-time side effects, decorator registries, `os.getenv`/`environ` reads | yes — `ast`: `write_text`/`write_bytes`/`save`/`json.dump`/`open(...,"w")` |
 | **Go** | yes — tree-sitter, fully implemented | yes — structs and interfaces via tree-sitter | yes — `init`, goroutine spawns, package-level `var = call(...)` | yes — `os.WriteFile`, `os.Create`, `.Write`, `.Exec` |
 | **Java** | yes — tree-sitter, fully implemented | yes — class/record/interface/enum via tree-sitter | yes — `static {}`, Spring stereotypes, thread/executor spawns | yes — `Files.write`, `.write`/`.append`, `.save`/`.persist`, `new FileWriter` |
 | **JavaScript** | yes — tree-sitter, fully implemented | not supported (`supports_contracts = False`) | yes — timer, event listener, top-level effects | yes — write patterns via tree-sitter |
 | **TypeScript** | yes — tree-sitter, fully implemented | yes — via regex (contracts, interfaces, zod schemas) | yes — via regex | yes — via tree-sitter |
 
-**Forensic gates:** language-aware; runs on all five languages where applicable. The gate framework uses `vigil_mapper` sources internally.
+**Forensic gates:** language-aware; runs on all five languages where applicable. The gate framework uses `vigil_mapper` sources internally. Includes an **ML/NN check pack** (`ml.*`): future-data leakage (`.shift(-N)`), scaler `fit`/`fit_transform` on `*_test`/`*_val` splits (train→test leakage), `train_test_split` without `random_state` (non-reproducible), and RNG use without a seed — high-precision static checks for data-science / model code.
 
-> **Note on the Python row.** "Authority writes — stubs return `[]`" refers to the *adapter* (`PythonAdapter.extract_writer_calls`). Real Python write detection lives in `authority_builder.py` (stdlib `ast`): `.write_text` / `.write_bytes` / `.save` / `os.replace`, plus `open(..., "w"/"a"/"x"/"+")` and `json.dump(...)`. Reads (`open(p)` / `open(p, "r")` / `.read_text()` / `json.load` / `json.dumps`) are not writes.
+> **Note on the Python row.** `PythonAdapter` extracts contracts/runtime/writers directly via `ast` (parity with Go/Java/TS at the adapter layer). The map builders (`data_contract_builder.py`, `authority_builder.py`, `runtime_builder.py`) remain the authoritative L2+ path and add deeper detection (e.g. the atomic-write trio `os.fdopen`+`write`+`os.replace`); the adapter methods surface the same signals at the source-adapter layer. Reads (`open(p)` / `open(p, "r")` / `.read_text()` / `json.load` / `json.dumps`) are not writes.
 
 ### Authority map works out-of-the-box (no seed required)
 
