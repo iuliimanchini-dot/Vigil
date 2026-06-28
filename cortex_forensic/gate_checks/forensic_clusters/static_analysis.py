@@ -140,7 +140,8 @@ _BUILTINS_BY_LANG: dict[str, set[str]] = {
         "oct", "bin", "pow", "repr", "callable", "isinstance", "issubclass",
         "getattr", "setattr", "hasattr", "property", "classmethod",
         "staticmethod", "frozenset", "compile", "eval", "exec", "globals",
-        "locals", "breakpoint", "complex", "file",
+        "locals", "breakpoint", "complex",
+        "bytearray", "memoryview", "slice", "reversed",
     },
     "javascript": {
         "Array", "Object", "String", "Number", "Boolean", "Function",
