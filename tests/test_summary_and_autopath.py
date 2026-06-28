@@ -100,7 +100,7 @@ class TestForensicResultsSummaryView:
 
     def test_summary_keys_present(self):
         """Summary dict must have required top-level keys."""
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         summary = _build_forensic_summary(result)
@@ -114,7 +114,7 @@ class TestForensicResultsSummaryView:
         assert "hint" in summary
 
     def test_summary_total_correct(self):
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         summary = _build_forensic_summary(result)
@@ -122,7 +122,7 @@ class TestForensicResultsSummaryView:
 
     def test_summary_by_severity_counts(self):
         """by_severity must include high/medium/low and counts must sum to total."""
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         summary = _build_forensic_summary(result)
@@ -135,7 +135,7 @@ class TestForensicResultsSummaryView:
 
     def test_summary_top_findings_capped_at_20(self):
         """top_findings must contain at most 20 entries."""
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         summary = _build_forensic_summary(result)
@@ -143,7 +143,7 @@ class TestForensicResultsSummaryView:
 
     def test_summary_top_findings_highest_severity(self):
         """top_findings must be drawn from the highest severity present."""
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         # There are HIGH findings in this dataset
@@ -157,7 +157,7 @@ class TestForensicResultsSummaryView:
 
     def test_summary_top_findings_fields(self):
         """Each top_finding must have the required compact fields."""
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         summary = _build_forensic_summary(result)
@@ -170,7 +170,7 @@ class TestForensicResultsSummaryView:
 
     def test_summary_by_check_id_capped_at_25(self):
         """by_check_id must have at most 25 entries (top by count)."""
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         summary = _build_forensic_summary(result)
@@ -178,7 +178,7 @@ class TestForensicResultsSummaryView:
 
     def test_summary_char_count_under_24000(self):
         """Summary JSON must stay well under 24 000 chars even for 125+ findings."""
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         summary = _build_forensic_summary(result)
@@ -189,7 +189,7 @@ class TestForensicResultsSummaryView:
 
     def test_summary_char_count_printed(self, capsys):
         """Print real char count for the final report (informational test)."""
-        from cortex_mcp.forensic_server import _build_forensic_summary
+        from vigil_mcp.forensic_server import _build_forensic_summary
 
         result = _make_fake_audit_result(125)
         summary = _build_forensic_summary(result)
@@ -199,8 +199,8 @@ class TestForensicResultsSummaryView:
 
     def test_get_forensic_results_default_is_summary(self):
         """get_forensic_results with no view= must default to summary."""
-        from cortex_mcp.forensic_server import get_forensic_results
-        from cortex_mcp._jobs import JobRegistry
+        from vigil_mcp.forensic_server import get_forensic_results
+        from vigil_mcp._jobs import JobRegistry
 
         reg = JobRegistry(max_concurrent=2)
         fake = _make_fake_audit_result(125)
@@ -209,7 +209,7 @@ class TestForensicResultsSummaryView:
         _poll(reg.status, jid)
 
         # Monkey-patch the module-level result function so the tool sees our job
-        import cortex_mcp._jobs as _jobs_mod
+        import vigil_mcp._jobs as _jobs_mod
         original_result = _jobs_mod.result
         _jobs_mod.result = reg.result
         try:
@@ -225,8 +225,8 @@ class TestForensicResultsSummaryView:
 
     def test_get_forensic_results_view_full_returns_all_findings(self):
         """view='full' must return the full findings list (paginated)."""
-        from cortex_mcp.forensic_server import get_forensic_results
-        from cortex_mcp._jobs import JobRegistry
+        from vigil_mcp.forensic_server import get_forensic_results
+        from vigil_mcp._jobs import JobRegistry
 
         reg = JobRegistry(max_concurrent=2)
         fake = _make_fake_audit_result(50)
@@ -234,7 +234,7 @@ class TestForensicResultsSummaryView:
         jid = r["job_id"]
         _poll(reg.status, jid)
 
-        import cortex_mcp._jobs as _jobs_mod
+        import vigil_mcp._jobs as _jobs_mod
         original_result = _jobs_mod.result
         _jobs_mod.result = reg.result
         try:
@@ -250,8 +250,8 @@ class TestForensicResultsSummaryView:
 
     def test_get_forensic_results_full_severity_filter(self):
         """view='full' with severity='HIGH' must return only HIGH findings."""
-        from cortex_mcp.forensic_server import get_forensic_results
-        from cortex_mcp._jobs import JobRegistry
+        from vigil_mcp.forensic_server import get_forensic_results
+        from vigil_mcp._jobs import JobRegistry
 
         reg = JobRegistry(max_concurrent=2)
         fake = _make_fake_audit_result(125)
@@ -259,7 +259,7 @@ class TestForensicResultsSummaryView:
         jid = r["job_id"]
         _poll(reg.status, jid)
 
-        import cortex_mcp._jobs as _jobs_mod
+        import vigil_mcp._jobs as _jobs_mod
         original_result = _jobs_mod.result
         _jobs_mod.result = reg.result
         try:
@@ -275,8 +275,8 @@ class TestForensicResultsSummaryView:
 
     def test_get_forensic_results_full_check_id_filter(self):
         """view='full' with check_id='broad_except' must return only that check_id."""
-        from cortex_mcp.forensic_server import get_forensic_results
-        from cortex_mcp._jobs import JobRegistry
+        from vigil_mcp.forensic_server import get_forensic_results
+        from vigil_mcp._jobs import JobRegistry
 
         reg = JobRegistry(max_concurrent=2)
         fake = _make_fake_audit_result(125)
@@ -284,7 +284,7 @@ class TestForensicResultsSummaryView:
         jid = r["job_id"]
         _poll(reg.status, jid)
 
-        import cortex_mcp._jobs as _jobs_mod
+        import vigil_mcp._jobs as _jobs_mod
         original_result = _jobs_mod.result
         _jobs_mod.result = reg.result
         try:
@@ -330,7 +330,7 @@ class TestMapResultsSummaryView:
         }
 
     def test_summary_has_by_map_type(self):
-        from cortex_mcp.map_server import _build_map_summary
+        from vigil_mcp.map_server import _build_map_summary
 
         maps_data = self._make_fake_maps_data()
         summary = _build_map_summary(maps_data)
@@ -341,7 +341,7 @@ class TestMapResultsSummaryView:
         assert bmt["data_contract"] == 1
 
     def test_summary_has_top_entries(self):
-        from cortex_mcp.map_server import _build_map_summary
+        from vigil_mcp.map_server import _build_map_summary
 
         maps_data = self._make_fake_maps_data()
         summary = _build_map_summary(maps_data)
@@ -350,7 +350,7 @@ class TestMapResultsSummaryView:
         assert len(summary["top_entries"].get("structural", [])) <= 10
 
     def test_summary_top_entries_fields(self):
-        from cortex_mcp.map_server import _build_map_summary
+        from vigil_mcp.map_server import _build_map_summary
 
         maps_data = self._make_fake_maps_data()
         summary = _build_map_summary(maps_data)
@@ -359,7 +359,7 @@ class TestMapResultsSummaryView:
             assert "file" in entry
 
     def test_summary_has_hint(self):
-        from cortex_mcp.map_server import _build_map_summary
+        from vigil_mcp.map_server import _build_map_summary
 
         maps_data = self._make_fake_maps_data()
         summary = _build_map_summary(maps_data)
@@ -367,7 +367,7 @@ class TestMapResultsSummaryView:
         assert len(summary["hint"]) > 0
 
     def test_summary_char_count_bounded(self):
-        from cortex_mcp.map_server import _build_map_summary
+        from vigil_mcp.map_server import _build_map_summary
 
         maps_data = self._make_fake_maps_data(n_structural=100, n_hotspot=50)
         summary = _build_map_summary(maps_data)
@@ -378,8 +378,8 @@ class TestMapResultsSummaryView:
 
     def test_get_code_map_results_default_is_summary(self):
         """get_code_map_results with no view= must default to summary."""
-        from cortex_mcp.map_server import get_code_map_results
-        from cortex_mcp._jobs import JobRegistry
+        from vigil_mcp.map_server import get_code_map_results
+        from vigil_mcp._jobs import JobRegistry
 
         reg = JobRegistry(max_concurrent=2)
         # Fake job result: _run_map_build_with_path-shaped dict
@@ -388,8 +388,8 @@ class TestMapResultsSummaryView:
         jid = r["job_id"]
         _poll(reg.status, jid)
 
-        import cortex_mcp._jobs as _jobs_mod
-        import cortex_mcp.map_server as map_srv
+        import vigil_mcp._jobs as _jobs_mod
+        import vigil_mcp.map_server as map_srv
         original_result = _jobs_mod.result
         # Also patch _repo_maps_to_serialisable to avoid needing disk maps
         original_r2s = map_srv._repo_maps_to_serialisable
@@ -421,8 +421,8 @@ class TestMapResultsSummaryView:
 
     def test_get_code_map_results_map_filter_returns_one_map(self):
         """get_code_map_results with map='structural' returns only structural entries."""
-        from cortex_mcp.map_server import get_code_map_results
-        from cortex_mcp._jobs import JobRegistry
+        from vigil_mcp.map_server import get_code_map_results
+        from vigil_mcp._jobs import JobRegistry
 
         reg = JobRegistry(max_concurrent=2)
         fake_inner = {"exit_code": 0, "_path": None}
@@ -430,8 +430,8 @@ class TestMapResultsSummaryView:
         jid = r["job_id"]
         _poll(reg.status, jid)
 
-        import cortex_mcp._jobs as _jobs_mod
-        import cortex_mcp.map_server as map_srv
+        import vigil_mcp._jobs as _jobs_mod
+        import vigil_mcp.map_server as map_srv
         original_result = _jobs_mod.result
         original_r2s = map_srv._repo_maps_to_serialisable
 
@@ -458,8 +458,8 @@ class TestMapResultsSummaryView:
 
     def test_get_code_map_results_view_full_returns_all_maps(self):
         """view='full' with no map returns all maps (backward compat)."""
-        from cortex_mcp.map_server import get_code_map_results
-        from cortex_mcp._jobs import JobRegistry
+        from vigil_mcp.map_server import get_code_map_results
+        from vigil_mcp._jobs import JobRegistry
 
         reg = JobRegistry(max_concurrent=2)
         fake_inner = {"exit_code": 0, "_path": None}
@@ -467,8 +467,8 @@ class TestMapResultsSummaryView:
         jid = r["job_id"]
         _poll(reg.status, jid)
 
-        import cortex_mcp._jobs as _jobs_mod
-        import cortex_mcp.map_server as map_srv
+        import vigil_mcp._jobs as _jobs_mod
+        import vigil_mcp.map_server as map_srv
         original_result = _jobs_mod.result
         original_r2s = map_srv._repo_maps_to_serialisable
 
@@ -497,7 +497,7 @@ class TestResolveProjectRoot:
     """Unit tests for the _resolve_project_root helper."""
 
     def test_finds_git_in_current_dir(self, tmp_path):
-        from cortex_mcp._paths import _resolve_project_root
+        from vigil_mcp._paths import _resolve_project_root
 
         project = tmp_path / "myproject"
         project.mkdir()
@@ -507,7 +507,7 @@ class TestResolveProjectRoot:
         assert result == str(project)
 
     def test_finds_pyproject_in_current_dir(self, tmp_path):
-        from cortex_mcp._paths import _resolve_project_root
+        from vigil_mcp._paths import _resolve_project_root
 
         project = tmp_path / "pypkg"
         project.mkdir()
@@ -518,7 +518,7 @@ class TestResolveProjectRoot:
 
     def test_finds_git_in_ancestor(self, tmp_path):
         """If .git is 2 levels up, _resolve_project_root should find it."""
-        from cortex_mcp._paths import _resolve_project_root
+        from vigil_mcp._paths import _resolve_project_root
 
         root = tmp_path / "repo"
         root.mkdir()
@@ -530,7 +530,7 @@ class TestResolveProjectRoot:
         assert result == str(root)
 
     def test_finds_package_json_in_ancestor(self, tmp_path):
-        from cortex_mcp._paths import _resolve_project_root
+        from vigil_mcp._paths import _resolve_project_root
 
         root = tmp_path / "jsrepo"
         root.mkdir()
@@ -543,7 +543,7 @@ class TestResolveProjectRoot:
 
     def test_falls_back_to_start_when_no_marker(self, tmp_path):
         """With no .git/pyproject.toml/package.json, fall back to start dir."""
-        from cortex_mcp._paths import _resolve_project_root
+        from vigil_mcp._paths import _resolve_project_root
 
         bare = tmp_path / "bare"
         bare.mkdir()
@@ -553,7 +553,7 @@ class TestResolveProjectRoot:
 
     def test_none_start_falls_back_to_cwd(self):
         """_resolve_project_root(None) must not crash and returns a string."""
-        from cortex_mcp._paths import _resolve_project_root
+        from vigil_mcp._paths import _resolve_project_root
         import os
 
         result = _resolve_project_root(None)
@@ -564,7 +564,7 @@ class TestResolveProjectRoot:
 
     def test_prefers_git_over_pyproject(self, tmp_path):
         """When both .git and pyproject.toml exist in the same dir, finds that dir."""
-        from cortex_mcp._paths import _resolve_project_root
+        from vigil_mcp._paths import _resolve_project_root
 
         project = tmp_path / "both"
         project.mkdir()
@@ -580,8 +580,8 @@ class TestAutoPathInStartTools:
 
     def test_start_forensic_audit_empty_path_returns_resolved_path(self, tmp_path):
         """start_forensic_audit('') auto-detects project, includes resolved_path in response."""
-        from cortex_mcp.forensic_server import start_forensic_audit
-        import cortex_mcp._jobs as _jobs_mod
+        from vigil_mcp.forensic_server import start_forensic_audit
+        import vigil_mcp._jobs as _jobs_mod
 
         # Create a pyproject.toml project in tmp_path
         project = tmp_path / "autodetect_proj"
@@ -590,8 +590,8 @@ class TestAutoPathInStartTools:
         (project / "main.py").write_text("x = 1\n", encoding="utf-8")
 
         # Patch _resolve_project_root to return our tmp project
-        import cortex_mcp._paths as _paths_mod
-        import cortex_mcp.forensic_server as fsrv
+        import vigil_mcp._paths as _paths_mod
+        import vigil_mcp.forensic_server as fsrv
         original_resolve = _paths_mod._resolve_project_root
         _paths_mod._resolve_project_root = lambda start: str(project)
         # Also patch _jobs.start so we don't actually run the audit
@@ -614,9 +614,9 @@ class TestAutoPathInStartTools:
 
     def test_start_code_map_empty_path_returns_resolved_path(self, tmp_path):
         """start_code_map('') auto-detects project, includes resolved_path in response."""
-        from cortex_mcp.map_server import start_code_map
-        import cortex_mcp._jobs as _jobs_mod
-        import cortex_mcp._paths as _paths_mod
+        from vigil_mcp.map_server import start_code_map
+        import vigil_mcp._jobs as _jobs_mod
+        import vigil_mcp._paths as _paths_mod
 
         project = tmp_path / "map_autodetect"
         project.mkdir()
@@ -640,8 +640,8 @@ class TestAutoPathInStartTools:
 
     def test_start_forensic_audit_explicit_path_not_overridden(self, tmp_path):
         """When an explicit path is given, it is used as-is (not auto-resolved)."""
-        from cortex_mcp.forensic_server import start_forensic_audit
-        import cortex_mcp._jobs as _jobs_mod
+        from vigil_mcp.forensic_server import start_forensic_audit
+        import vigil_mcp._jobs as _jobs_mod
 
         explicit = tmp_path / "explicit"
         explicit.mkdir()

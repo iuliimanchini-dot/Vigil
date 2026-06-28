@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cortex-codeintel"
+name = "vigil"
 version = "0.1.0"
 description = "Multi-language code intelligence: structural mapper, forensic gate auditor, and two FastMCP stdio servers"
 requires-python = ">=3.10"
@@ -34,12 +34,12 @@ dev = [
 ]
 
 [project.scripts]
-cortex-map-mcp = "cortex_mcp.map_server:main"
-cortex-forensic-mcp = "cortex_mcp.forensic_server:main"
+vigil-mapper-mcp = "vigil_mcp.map_server:main"
+vigil-forensic-mcp = "vigil_mcp.forensic_server:main"
 
 [tool.setuptools.packages.find]
-include = ["cortex_map_builder*", "cortex_forensic*", "cortex_mcp*"]
+include = ["vigil_mapper*", "vigil_forensic*", "vigil_mcp*"]
 exclude = ["tests*", "docs*"]
 
 [tool.setuptools.package-data]
-cortex_forensic = ["*.json"]
+vigil_forensic = ["*.json"]

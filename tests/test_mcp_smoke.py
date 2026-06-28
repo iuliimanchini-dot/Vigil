@@ -1,4 +1,4 @@
-"""Smoke tests for cortex_mcp.
+"""Smoke tests for vigil_mcp.
 
 Resource-light: uses a tiny tmp project, no xdist, single-threaded poll loops.
 Tests drive the Python functions directly (no MCP wire protocol needed).
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from cortex_mcp._jobs import JobRegistry
+from vigil_mcp._jobs import JobRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ class TestJobRegistry:
 
 class TestForensicMCP:
     def test_start_poll_results(self, tmp_path):
-        from cortex_mcp.forensic_server import (
+        from vigil_mcp.forensic_server import (
             start_forensic_audit,
             get_forensic_status,
             get_forensic_results,
@@ -177,7 +177,7 @@ class TestForensicMCP:
         assert "total_chars" in results
 
     def test_cancel_forensic(self, tmp_path):
-        from cortex_mcp.forensic_server import (
+        from vigil_mcp.forensic_server import (
             start_forensic_audit,
             get_forensic_status,
             cancel_forensic_audit,
@@ -198,7 +198,7 @@ class TestForensicMCP:
 
 class TestMapMCP:
     def test_start_poll_results(self, tmp_path):
-        from cortex_mcp.map_server import (
+        from vigil_mcp.map_server import (
             start_code_map,
             get_code_map_status,
             get_code_map_results,
@@ -227,7 +227,7 @@ class TestMapMCP:
 
     def test_load_by_path_missing(self, tmp_path):
         """load_code_map_by_path on a path with no built maps returns missing flag."""
-        from cortex_mcp.map_server import load_code_map_by_path
+        from vigil_mcp.map_server import load_code_map_by_path
 
         result = load_code_map_by_path(str(tmp_path))
         assert result["status"] == "ok"
@@ -236,7 +236,7 @@ class TestMapMCP:
         assert maps.get("missing") is True
 
     def test_cancel_map(self, tmp_path):
-        from cortex_mcp.map_server import start_code_map, cancel_code_map
+        from vigil_mcp.map_server import start_code_map, cancel_code_map
 
         proj = _make_tiny_project(tmp_path)
         r = start_code_map(str(proj))

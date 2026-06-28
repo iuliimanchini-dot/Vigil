@@ -1,4 +1,4 @@
-"""Disk-backed persistence for cortex_mcp._jobs.JobRegistry (G2.3).
+"""Disk-backed persistence for vigil_mcp._jobs.JobRegistry (G2.3).
 
 Contract under test
 -------------------
@@ -28,7 +28,7 @@ import json
 import time
 from pathlib import Path
 
-from cortex_mcp._jobs import (
+from vigil_mcp._jobs import (
     JobRegistry,
     STATUS_DONE,
     STATUS_ERROR,

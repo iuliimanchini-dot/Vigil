@@ -1,4 +1,4 @@
-"""Smoke test for the standalone cortex_map_builder package.
+"""Smoke test for the standalone vigil_mapper package.
 
 Creates a tiny 3-file project (Python, Go, TypeScript) and runs
 run_map_build on it. Asserts exit code 0 and structural map has
@@ -57,7 +57,7 @@ def _make_sample_project(root: Path) -> None:
 
 def test_run_map_build_returns_zero():
     """run_map_build on a tiny multi-language project returns exit code 0."""
-    from cortex_map_builder import run_map_build
+    from vigil_mapper import run_map_build
 
     with tempfile.TemporaryDirectory() as tmp:
         project = Path(tmp) / "sample_project"
@@ -78,7 +78,7 @@ def test_run_map_build_returns_zero():
 
 def test_structural_map_has_all_three_files():
     """Structural map output contains entries for a.py, b.go, and c.ts."""
-    from cortex_map_builder import run_map_build
+    from vigil_mapper import run_map_build
 
     with tempfile.TemporaryDirectory() as tmp:
         project = Path(tmp) / "sample_project"
@@ -115,6 +115,6 @@ def test_structural_map_has_all_three_files():
 
 def test_package_import_works():
     """Basic: package imports without errors."""
-    import cortex_map_builder
-    assert hasattr(cortex_map_builder, "run_map_build")
-    assert callable(cortex_map_builder.run_map_build)
+    import vigil_mapper
+    assert hasattr(vigil_mapper, "run_map_build")
+    assert callable(vigil_mapper.run_map_build)

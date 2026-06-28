@@ -25,10 +25,10 @@ import re
 
 import pytest
 
-from cortex_forensic.gate_checks.forensic_clusters.dead_code import assess_unused_imports
-from cortex_forensic.gate_checks.forensic_clusters.code_style import assess_magic_numbers
-from cortex_forensic.gate_checks.forensic_clusters.static_analysis import assess_docstring_params
-from cortex_forensic.gate_checks.forensic_clusters.data_quality import assess_near_duplicate_code
+from vigil_forensic.gate_checks.forensic_clusters.dead_code import assess_unused_imports
+from vigil_forensic.gate_checks.forensic_clusters.code_style import assess_magic_numbers
+from vigil_forensic.gate_checks.forensic_clusters.static_analysis import assess_docstring_params
+from vigil_forensic.gate_checks.forensic_clusters.data_quality import assess_near_duplicate_code
 
 
 def _names(findings):

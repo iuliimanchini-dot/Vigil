@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Real-world fitness benchmark for cortex_forensic + cortex_map_builder.
+"""Real-world fitness benchmark for vigil_forensic + vigil_mapper.
 
 Measures, on REAL third-party Python packages copied out of the local
 ``.venv/Lib/site-packages`` into a throw-away temp project dir:
@@ -30,10 +30,10 @@ from pathlib import Path
 
 import psutil
 
-from cortex_forensic import run_forensic_audit
-from cortex_map_builder import run_map_build, load_repo_maps
-from cortex_mcp.forensic_server import _build_forensic_summary
-from cortex_mcp.map_server import _build_map_summary, _repo_maps_to_serialisable
+from vigil_forensic import run_forensic_audit
+from vigil_mapper import run_map_build, load_repo_maps
+from vigil_mcp.forensic_server import _build_forensic_summary
+from vigil_mcp.map_server import _build_map_summary, _repo_maps_to_serialisable
 
 REPO = Path(__file__).resolve().parents[1]
 SITE = REPO / ".venv" / "Lib" / "site-packages"
@@ -86,10 +86,10 @@ def _copy_package(name: str, dest_root: Path) -> Path:
     copied target dir so the forensic audit resolves the *default profile*
     (file_warn 750 / file_revise 1000 / nesting_warn 5) via resolution step 1,
     not the stricter hardcoded code fallback (600/800/4). The shipped profile now
-    lives INSIDE the cortex_forensic package, so it is sourced via the canonical
+    lives INSIDE the vigil_forensic package, so it is sourced via the canonical
     resolver rather than a repo-root path (which no longer exists post-install).
     """
-    from cortex_forensic.self_audit import _packaged_gate_profile_path
+    from vigil_forensic.self_audit import _packaged_gate_profile_path
 
     src = SITE / name
     if not src.is_dir():

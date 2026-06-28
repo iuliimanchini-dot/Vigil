@@ -1,7 +1,7 @@
-# Roadmap: cortex-codeintel → полноценный полезный MCP-сервер
+# Roadmap: vigil → полноценный полезный MCP-сервер
 
 ## Где мы сейчас (честно)
-Репозиторий `cortex-codeintel` (6 коммитов): 3 пакета — `cortex_map_builder`, `cortex_forensic`, `cortex_mcp` (2 FastMCP stdio-сервера: `code-map`, `forensic-audit`).
+Репозиторий `vigil` (6 коммитов): 3 пакета — `vigil_mapper`, `vigil_forensic`, `vigil_mcp` (2 FastMCP stdio-сервера: `code-map`, `forensic-audit`).
 
 **Сделано и проверено:**
 - Extraction из Vigil (D), MCP-серверы фоновые (E), packaging+CI yaml (F).
@@ -43,9 +43,9 @@
 ## План
 
 ### G1 — Зачистка extraction-артефактов  [CRITICAL: корректность]
-- **G1.1** `runtime_tracer.py:84` + `runtime_tracer_entry.py`: argv `BRAIN.autoforensics...` → `cortex_map_builder.runtime_tracer_entry`. Решить: починить trace ИЛИ static-only + явная opt-in заглушка с понятной ошибкой.
+- **G1.1** `runtime_tracer.py:84` + `runtime_tracer_entry.py`: argv `BRAIN.autoforensics...` → `vigil_mapper.runtime_tracer_entry`. Решить: починить trace ИЛИ static-only + явная opt-in заглушка с понятной ошибкой.
 - **G1.2** `integrity_checks` (phantom_handlers, declared_capabilities) — Vigil-специфичные (INTERFACE.operator). Отключить в standalone (gate-registry skip, как дропнули FOC) → убирает ложные HIGH.
-- **G1.3** Producer-метки `BRAIN.autoforensics.*` → `cortex_map_builder.*` (map_models/map_storage/cli_entry).
+- **G1.3** Producer-метки `BRAIN.autoforensics.*` → `vigil_mapper.*` (map_models/map_storage/cli_entry).
 - **G1.4** ПОЛНЫЙ аудит cluster-ссылок (не только `import` — argv/importlib/строки/docstrings). Классифицировать: functional → починить; provenance-docstring → оставить/переформулировать.
 - **Verify:** forensic на не-Vigil проекте без `declared_vs_actual`/INTERFACE-findings; честный grep.
 

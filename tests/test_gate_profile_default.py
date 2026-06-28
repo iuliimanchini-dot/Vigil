@@ -1,7 +1,7 @@
 """Tests for the default forensic gate profile (size-noise FP control).
 
 Covers (G4):
-  1. The shipped ``gate_profile.json`` ships INSIDE the cortex_forensic package
+  1. The shipped ``gate_profile.json`` ships INSIDE the vigil_forensic package
      (so it is included in the wheel), is valid JSON, loads via the real loader,
      and carries the documented industry-standard thresholds.
   2. Ancestor-walk fallback: a target with no co-located profile discovers an
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from cortex_forensic.self_audit import _load_gate_profile_if_present
+from vigil_forensic.self_audit import _load_gate_profile_if_present
 
 
 # Thresholds documented in README.md "Default gate profile" section. Each value
@@ -38,7 +38,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 # The default profile ships INSIDE the package so it is bundled in the wheel
 # (repo root is not present after `pip install`). Mirrors
 # self_audit._packaged_gate_profile_path().
-_SHIPPED_PROFILE = _REPO_ROOT / "cortex_forensic" / "gate_profile.json"
+_SHIPPED_PROFILE = _REPO_ROOT / "vigil_forensic" / "gate_profile.json"
 
 
 # ---------------------------------------------------------------------------
@@ -48,13 +48,13 @@ _SHIPPED_PROFILE = _REPO_ROOT / "cortex_forensic" / "gate_profile.json"
 def _run_size_checks_with_thresholds(tmp_path: Path, source_files, thresholds):
     """Run run_size_complexity_checks against source_files with an explicit
     size-threshold profile, return the list of size findings."""
-    from cortex_forensic._shared import RepoGateProfile, GateCategory
-    from cortex_forensic.gate_models import (
+    from vigil_forensic._shared import RepoGateProfile, GateCategory
+    from vigil_forensic.gate_models import (
         PostExecGateContext, RuntimeState, VerificationSummary, detect_source_package_roots,
     )
-    from cortex_forensic._stubs import ValidationContractProfile, PocketCoderForensicReport
-    from cortex_forensic.gate_checks.common import normalize_path, read_snapshot
-    from cortex_forensic.gate_checks.size_complexity_checks import run_size_complexity_checks
+    from vigil_forensic._stubs import ValidationContractProfile, PocketCoderForensicReport
+    from vigil_forensic.gate_checks.common import normalize_path, read_snapshot
+    from vigil_forensic.gate_checks.size_complexity_checks import run_size_complexity_checks
 
     profile = RepoGateProfile(
         profile_name="test",
@@ -99,16 +99,16 @@ class TestShippedDefaultProfile:
     def test_shipped_profile_is_inside_package(self):
         """The profile must live next to self_audit.py so package-data ships it
         in the wheel and _packaged_gate_profile_path() can find it post-install."""
-        from cortex_forensic.self_audit import _packaged_gate_profile_path
+        from vigil_forensic.self_audit import _packaged_gate_profile_path
         packaged = _packaged_gate_profile_path()
         assert packaged is not None and packaged.is_file(), (
             "_packaged_gate_profile_path() must resolve the in-package profile"
         )
         assert packaged.resolve() == _SHIPPED_PROFILE.resolve()
-        import cortex_forensic
-        pkg_dir = Path(cortex_forensic.__file__).resolve().parent
+        import vigil_forensic
+        pkg_dir = Path(vigil_forensic.__file__).resolve().parent
         assert packaged.resolve().parent == pkg_dir, (
-            "profile must be co-located with the cortex_forensic package"
+            "profile must be co-located with the vigil_forensic package"
         )
 
     def test_shipped_profile_is_valid_json(self):
@@ -137,13 +137,13 @@ class TestShippedDefaultProfile:
 
 class TestAncestorWalkFallback:
     def test_subpackage_audit_resolves_inpackage_profile(self):
-        """Auditing the cortex_forensic package itself must resolve the shipped
+        """Auditing the vigil_forensic package itself must resolve the shipped
         default profile. The profile is now co-located INSIDE the package, so it
         is picked up directly (candidate step 1), proving the in-package copy is
         the effective default for a sub-package target."""
-        target = _REPO_ROOT / "cortex_forensic"
+        target = _REPO_ROOT / "vigil_forensic"
         assert (target / "gate_profile.json").is_file(), (
-            "the default profile must be co-located inside cortex_forensic/"
+            "the default profile must be co-located inside vigil_forensic/"
         )
         profile = _load_gate_profile_if_present(target)
         assert profile is not None, "loader must find the in-package profile"

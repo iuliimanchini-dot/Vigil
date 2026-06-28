@@ -55,7 +55,7 @@ def _make_project(root: Path, n_files: int, subdirs: tuple[str, ...] = ("scripts
 class TestForensicFileCountGuard:
     def test_small_project_scans_normally(self, tmp_path):
         """A 30-file project (< limit) is scanned: not skipped, gates ran."""
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
 
         proj = tmp_path / "proj"
         _make_project(proj, n_files=30)
@@ -74,7 +74,7 @@ class TestForensicFileCountGuard:
         Uses max_files=10 so the test stays light. The decisive evidence that
         no gate work ran is findings == [] together with the skip marker.
         """
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
 
         proj = tmp_path / "proj"
         _make_project(proj, n_files=40)
@@ -104,7 +104,7 @@ class TestForensicFileCountGuard:
 
     def test_max_files_override_forces_scan(self, tmp_path):
         """Raising max_files above the count makes the same project scan."""
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
 
         proj = tmp_path / "proj"
         _make_project(proj, n_files=40)
@@ -121,7 +121,7 @@ class TestForensicFileCountGuard:
         counted. Because it must be excluded, only the handful of real files
         remain and the project scans normally.
         """
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
 
         proj = tmp_path / "proj"
         proj.mkdir()
@@ -142,7 +142,7 @@ class TestForensicFileCountGuard:
 
     def test_discover_source_files_excludes_new_vendored_dirs(self, tmp_path):
         """discover_source_files drops the broadened vendored/build dir set."""
-        from cortex_forensic.self_audit import discover_source_files
+        from vigil_forensic.self_audit import discover_source_files
 
         proj = tmp_path / "proj"
         proj.mkdir()
@@ -162,7 +162,7 @@ class TestForensicFileCountGuard:
 class TestMapFileCountGuard:
     def test_small_project_builds_maps(self, tmp_path):
         """A 30-file project (< limit) builds maps normally (not skipped)."""
-        from cortex_mcp.map_server import _run_map_build_with_path
+        from vigil_mcp.map_server import _run_map_build_with_path
 
         proj = tmp_path / "proj"
         _make_project(proj, n_files=30)
@@ -178,7 +178,7 @@ class TestMapFileCountGuard:
 
     def test_over_limit_returns_skip_dict_fast(self, tmp_path):
         """> max_files -> structured too_many_files skip instead of a build."""
-        from cortex_mcp.map_server import _run_map_build_with_path
+        from vigil_mcp.map_server import _run_map_build_with_path
 
         proj = tmp_path / "proj"
         _make_project(proj, n_files=40)
@@ -204,7 +204,7 @@ class TestMapFileCountGuard:
 
     def test_max_files_override_builds(self, tmp_path):
         """Raising max_files makes the same project build maps."""
-        from cortex_mcp.map_server import _run_map_build_with_path
+        from vigil_mcp.map_server import _run_map_build_with_path
 
         proj = tmp_path / "proj"
         _make_project(proj, n_files=40)
@@ -217,7 +217,7 @@ class TestMapFileCountGuard:
 
     def test_map_excludes_new_vendored_dirs(self, tmp_path):
         """iter_source_files drops the broadened vendored/build dir set."""
-        from cortex_map_builder.map_common import iter_source_files
+        from vigil_mapper.map_common import iter_source_files
 
         proj = tmp_path / "proj"
         proj.mkdir()
@@ -238,7 +238,7 @@ class TestMapFileCountGuard:
 
 class TestGuardHelper:
     def test_summarize_top_subdirs_groups_and_sorts(self):
-        from cortex_map_builder._file_count_guard import summarize_top_subdirs
+        from vigil_mapper._file_count_guard import summarize_top_subdirs
 
         rels = (
             ["scripts/a.py"] * 5
@@ -253,7 +253,7 @@ class TestGuardHelper:
         assert counts == sorted(counts, reverse=True)
 
     def test_build_too_many_files_result_shape(self):
-        from cortex_map_builder._file_count_guard import build_too_many_files_meta
+        from vigil_mapper._file_count_guard import build_too_many_files_meta
 
         rels = ["scripts/a.py"] * 900 + ["lib/b.py"] * 50
         meta = build_too_many_files_meta(rels, max_files=800)

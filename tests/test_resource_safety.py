@@ -70,7 +70,7 @@ class TestFileSizeGuard:
 
     def test_oversized_file_skipped_and_listed(self, tmp_path):
         """A file above max_file_mb is skipped; its path appears in oversized_files."""
-        from cortex_map_builder.parse_cache import ParseCacheL1
+        from vigil_mapper.parse_cache import ParseCacheL1
 
         big = tmp_path / "big.py"
         _make_big_file(big, size_mb=2.0)
@@ -89,7 +89,7 @@ class TestFileSizeGuard:
 
     def test_normal_file_still_processed(self, tmp_path):
         """A file below the limit is parsed normally."""
-        from cortex_map_builder.parse_cache import ParseCacheL1
+        from vigil_mapper.parse_cache import ParseCacheL1
 
         small = tmp_path / "small.py"
         small.write_text("def greet(): return 'hi'\n", encoding="utf-8")
@@ -109,7 +109,7 @@ class TestFileSizeGuard:
         has its symbols correctly extracted.  The key check is that big.py's
         symbols are empty (parse was skipped) and the build succeeds.
         """
-        from cortex_map_builder import run_map_build
+        from vigil_mapper import run_map_build
 
         proj = tmp_path / "proj"
         proj.mkdir()
@@ -160,7 +160,7 @@ class TestLRUSourceCache:
 
     def test_cap_is_respected(self, tmp_path):
         """After inserting cap+1 entries, cache size stays at cap."""
-        from cortex_map_builder.parse_cache import ParseCacheL1
+        from vigil_mapper.parse_cache import ParseCacheL1
 
         cap = 3
         cache = ParseCacheL1(None, source_cache_max_entries=cap)
@@ -176,7 +176,7 @@ class TestLRUSourceCache:
 
     def test_oldest_evicted(self, tmp_path):
         """The first-inserted entry is evicted when cap is exceeded."""
-        from cortex_map_builder.parse_cache import ParseCacheL1
+        from vigil_mapper.parse_cache import ParseCacheL1
 
         cap = 2
         cache = ParseCacheL1(None, source_cache_max_entries=cap)
@@ -198,7 +198,7 @@ class TestLRUSourceCache:
 
     def test_reread_after_eviction_returns_correct_content(self, tmp_path):
         """get_cached_source after eviction returns None (cache miss), not stale data."""
-        from cortex_map_builder.parse_cache import ParseCacheL1
+        from vigil_mapper.parse_cache import ParseCacheL1
 
         cap = 1
         cache = ParseCacheL1(None, source_cache_max_entries=cap)
@@ -220,7 +220,7 @@ class TestLRUSourceCache:
 
     def test_hit_promotes_entry(self, tmp_path):
         """Accessing an entry via get_cached_source promotes it, protecting it from eviction."""
-        from cortex_map_builder.parse_cache import ParseCacheL1
+        from vigil_mapper.parse_cache import ParseCacheL1
 
         cap = 2
         cache = ParseCacheL1(None, source_cache_max_entries=cap)
@@ -265,7 +265,7 @@ class TestMapMemoryFree:
         """After run_map_build completes, the in_memory_acc dict inside cmd_map_build
         should have had its entries freed.  We verify by checking that the structural
         map is written correctly (build succeeded) and that the build returns 0."""
-        from cortex_map_builder import run_map_build
+        from vigil_mapper import run_map_build
 
         proj = tmp_path / "proj"
         _make_project(proj)
@@ -287,7 +287,7 @@ class TestMapMemoryFree:
         because tracemalloc overhead varies, but we verify peak stays below
         a generous 300 MB ceiling (the observed hang case was +729 MB).
         """
-        from cortex_map_builder import run_map_build
+        from vigil_mapper import run_map_build
 
         proj = tmp_path / "proj"
         # ~1.5 MB project: 40 files x ~1500 bytes each ≈ 60 KB source;
@@ -335,7 +335,7 @@ class TestJobTimeout:
 
     def test_job_times_out(self):
         """Worker that sleeps forever is cancelled by the watcher within timeout_s."""
-        from cortex_mcp._jobs import JobRegistry, STATUS_TIMEOUT
+        from vigil_mcp._jobs import JobRegistry, STATUS_TIMEOUT
 
         registry = JobRegistry()
 
@@ -354,7 +354,7 @@ class TestJobTimeout:
 
     def test_fast_job_not_timed_out(self):
         """A fast job completes normally and does NOT end up in timeout."""
-        from cortex_mcp._jobs import JobRegistry, STATUS_DONE
+        from vigil_mcp._jobs import JobRegistry, STATUS_DONE
 
         registry = JobRegistry()
 
@@ -372,7 +372,7 @@ class TestJobTimeout:
 
     def test_module_level_start_accepts_timeout_s(self):
         """The module-level start() function forwards timeout_s correctly."""
-        import cortex_mcp._jobs as jobs
+        import vigil_mcp._jobs as jobs
 
         def instant_fn():
             return "ok"
@@ -393,7 +393,7 @@ class TestRealCancellation:
     def test_presset_cancel_stops_early(self, tmp_path):
         """A cancel_event that is set before the call returns 0 but processes
         fewer maps than the full pipeline would (at most the first map)."""
-        from cortex_map_builder import run_map_build
+        from vigil_mapper import run_map_build
 
         proj = tmp_path / "proj"
         _make_project(proj)
@@ -424,8 +424,8 @@ class TestRealCancellation:
     def test_cancel_mid_run_stops_after_current_map(self, tmp_path):
         """A cancel_event set while structural is building causes the loop to
         stop before moving to the next map."""
-        from cortex_map_builder import run_map_build
-        import cortex_map_builder.cli_entry as ce
+        from vigil_mapper import run_map_build
+        import vigil_mapper.cli_entry as ce
 
         proj = tmp_path / "proj"
         _make_project(proj)

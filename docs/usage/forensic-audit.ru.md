@@ -60,17 +60,17 @@
 
 На данный момент это **локальная установка в editable-режиме** (на PyPI его пока нет). Он работает на той машине, где вы его установили; публикация на PyPI для использования на других машинах ожидается.
 
-Из корня репозитория `cortex-codeintel`:
+Из корня репозитория `vigil`:
 
 ```bash
-pip install -e .   # из репозитория cortex-codeintel
-claude mcp add forensic-audit -s user -- <abs-path-to-venv-python> -m cortex_mcp.forensic_server
+pip install -e .   # из репозитория vigil
+claude mcp add forensic-audit -s user -- <abs-path-to-venv-python> -m vigil_mcp.forensic_server
 ```
 
 Замените `<abs-path-to-venv-python>` на абсолютный путь к интерпретатору Python в вашем виртуальном окружении, например в Windows:
 
 ```
-C:\Users\You\path\to\cortex-codeintel\.venv\Scripts\python.exe
+C:\Users\You\path\to\vigil\.venv\Scripts\python.exe
 ```
 
 После добавления сервер предоставляет API по схеме **фоновая задача + опрос**. Типичный поток таков:

@@ -14,7 +14,7 @@ work as MCP servers, not just as Python modules.
 
 Design notes
 ------------
-* The servers are launched via ``<python> -m cortex_mcp.<server>`` — both
+* The servers are launched via ``<python> -m vigil_mcp.<server>`` — both
   modules expose ``if __name__ == "__main__": main()`` which calls
   ``mcp.run()`` (stdio transport by default).  Verified to launch this way.
 * These tools are annotated ``-> dict`` (a *bare* ``dict``).  FastMCP does not
@@ -129,7 +129,7 @@ async def _poll_until_terminal(
 
 async def _forensic_e2e(tmp_path: Path) -> None:
     proj = _make_tiny_project(tmp_path)
-    params = _server_params("cortex_mcp.forensic_server", cwd=proj)
+    params = _server_params("vigil_mcp.forensic_server", cwd=proj)
 
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -203,7 +203,7 @@ def test_forensic_server_stdio_e2e(tmp_path):
 
 async def _map_e2e(tmp_path: Path) -> None:
     proj = _make_tiny_project(tmp_path)
-    params = _server_params("cortex_mcp.map_server", cwd=proj)
+    params = _server_params("vigil_mcp.map_server", cwd=proj)
 
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:

@@ -1,4 +1,4 @@
-# cortex-codeintel
+# vigil
 
 Two FastMCP stdio servers for code intelligence, backed by multi-language static analysis cores.
 
@@ -8,13 +8,13 @@ Two FastMCP stdio servers for code intelligence, backed by multi-language static
 
 ## What it is
 
-`cortex-codeintel` packages three cooperating libraries:
+`vigil` packages three cooperating libraries:
 
-- **`cortex_map_builder`** — structural code mapper. Parses Python (stdlib `ast`) and Go/Java/JS/TS (tree-sitter). Produces typed maps: structural (imports + symbols), data contracts, runtime signals, authority writes, hotspots, refactor boundaries, conflicts, and findings. Output is written to `<project>/.cortex/maps/` as JSON.
+- **`vigil_mapper`** — structural code mapper. Parses Python (stdlib `ast`) and Go/Java/JS/TS (tree-sitter). Produces typed maps: structural (imports + symbols), data contracts, runtime signals, authority writes, hotspots, refactor boundaries, conflicts, and findings. Output is written to `<project>/.cortex/maps/` as JSON.
 
-- **`cortex_forensic`** — static forensic gate auditor. Runs a suite of 40+ pattern-based checks (broad-except, hallucinations, TOCTOU, security injection, config-safety, contract drift, etc.) against a project directory. Returns structured findings with severity, category, evidence, and fingerprint. Single public function: `run_forensic_audit(project_dir, ...) -> dict`.
+- **`vigil_forensic`** — static forensic gate auditor. Runs a suite of 40+ pattern-based checks (broad-except, hallucinations, TOCTOU, security injection, config-safety, contract drift, etc.) against a project directory. Returns structured findings with severity, category, evidence, and fingerprint. Single public function: `run_forensic_audit(project_dir, ...) -> dict`.
 
-- **`cortex_mcp`** — two FastMCP stdio servers (`code-map`, `forensic-audit`) that wrap the above cores behind a **background-job + poll** API. Resource-constrained: max 2 concurrent jobs, cancellable, output paginated/capped at 80 000 chars (~25 k tokens) per page.
+- **`vigil_mcp`** — two FastMCP stdio servers (`code-map`, `forensic-audit`) that wrap the above cores behind a **background-job + poll** API. Resource-constrained: max 2 concurrent jobs, cancellable, output paginated/capped at 80 000 chars (~25 k tokens) per page.
 
 ---
 
@@ -30,21 +30,21 @@ The table below reflects the actual `supports_*` flags and implementation state 
 | **JavaScript** | yes — tree-sitter, fully implemented | not supported (`supports_contracts = False`) | yes — timer, event listener, top-level effects | yes — write patterns via tree-sitter |
 | **TypeScript** | yes — tree-sitter, fully implemented | yes — via regex (contracts, interfaces, zod schemas) | yes — via regex | yes — via tree-sitter |
 
-**Forensic gates:** language-aware; runs on all five languages where applicable. The gate framework uses `cortex_map_builder` sources internally.
+**Forensic gates:** language-aware; runs on all five languages where applicable. The gate framework uses `vigil_mapper` sources internally.
 
 > **Note on the Python row.** "Authority writes — stubs return `[]`" refers to the *adapter* (`PythonAdapter.extract_writer_calls`). Real Python write detection lives in `authority_builder.py` (stdlib `ast`): `.write_text` / `.write_bytes` / `.save` / `os.replace`, plus `open(..., "w"/"a"/"x"/"+")` and `json.dump(...)`. Reads (`open(p)` / `open(p, "r")` / `.read_text()` / `json.load` / `json.dumps`) are not writes.
 
 ### Authority map works out-of-the-box (no seed required)
 
-The authority map (`cortex_map_builder/authority_builder.py`) is useful on any project **without configuration**. With **no** `<project>/.cortex/map_seeds/authority_domains.json`, every discovered write site is auto-surfaced as an *inferred* per-writer `AuthorityDomain` (`status="inferred"`, `source="static_scan"`, modest confidence). Each entry names the writer file (`canonical_owner`) and lists its resolved write targets + operation kinds, so the map is immediately actionable. A pure read never produces an entry.
+The authority map (`vigil_mapper/authority_builder.py`) is useful on any project **without configuration**. With **no** `<project>/.cortex/map_seeds/authority_domains.json`, every discovered write site is auto-surfaced as an *inferred* per-writer `AuthorityDomain` (`status="inferred"`, `source="static_scan"`, modest confidence). Each entry names the writer file (`canonical_owner`) and lists its resolved write targets + operation kinds, so the map is immediately actionable. A pure read never produces an entry.
 
 Providing a seed switches to the structured behaviour: domains carry `target_file_patterns`, writers are attributed by AST-resolved target match, and seed entries are `status="observed"`. With a seed present, the per-writer auto-surfacing is **not** added (no double-surfacing).
 
-Known limitation: write sites whose target is unresolvable and which use idioms outside the detected set — notably the atomic-write trio `os.fdopen(fd, "w")` + `fh.write(...)` + `os.replace(tmp, str(path))` — are not detected, so a file that *only* writes that way (e.g. `cortex_map_builder/map_storage.py`) will not surface. This is a discovery-layer limitation, independent of the seed behaviour.
+Known limitation: write sites whose target is unresolvable and which use idioms outside the detected set — notably the atomic-write trio `os.fdopen(fd, "w")` + `fh.write(...)` + `os.replace(tmp, str(path))` — are not detected, so a file that *only* writes that way (e.g. `vigil_mapper/map_storage.py`) will not surface. This is a discovery-layer limitation, independent of the seed behaviour.
 
 ### Runtime map surfaces entrypoints out-of-the-box (no seed required)
 
-The runtime map (`cortex_map_builder/runtime_builder.py`) surfaces real entrypoints on any project **without configuration**. With **no** `<project>/.cortex/map_seeds/runtime_seed.json`, the Python AST scanner (`_runtime_ast._RuntimeVisitor`) emits inferred `RuntimeNode` entries (`status="inferred"`, `source="static_scan"`, evidence pointing at `file:line`) for:
+The runtime map (`vigil_mapper/runtime_builder.py`) surfaces real entrypoints on any project **without configuration**. With **no** `<project>/.cortex/map_seeds/runtime_seed.json`, the Python AST scanner (`_runtime_ast._RuntimeVisitor`) emits inferred `RuntimeNode` entries (`status="inferred"`, `source="static_scan"`, evidence pointing at `file:line`) for:
 
 - `if __name__ == "__main__":` blocks (`kind="main_entrypoint"`); the invoked entry functions are recorded in `calls`;
 - the module-level function(s) invoked from that block (`kind="entry_function"`);
@@ -54,7 +54,7 @@ Adapter-provided runtime signals (Go `init`/goroutine, Java static-block/Spring/
 
 Precision guard: an ordinary helper function or a plain import is **not** an entrypoint. A `def main(): ...` *without* a `__main__` guard is just a function and does **not** produce a `main_entrypoint` node. Providing a seed keeps the existing behaviour — seed nodes are `status="canonical"` and win on name conflicts, so the same node is never double-surfaced; auto-discovered nodes augment the seed.
 
-Known limitation: entrypoints exposed only via packaging (`console_scripts` / `[project.scripts]`) without an in-file `__main__` guard — e.g. `cortex_map_builder/cli_entry.py` — are not surfaced by the static scan (there is no in-source signal to key on). Background tasks/routes are detected only inside init-style function bodies (`__init__`/`bootstrap`/`setup`/`startup`/`start`/`initialize`/`init`), per the existing visitor scope.
+Known limitation: entrypoints exposed only via packaging (`console_scripts` / `[project.scripts]`) without an in-file `__main__` guard — e.g. `vigil_mapper/cli_entry.py` — are not surfaced by the static scan (there is no in-source signal to key on). Background tasks/routes are detected only inside init-style function bodies (`__init__`/`bootstrap`/`setup`/`startup`/`start`/`initialize`/`init`), per the existing visitor scope.
 
 ---
 
@@ -82,8 +82,8 @@ pip install -e ".[dev]"
 ### Option A — `claude mcp add` (stdio, recommended)
 
 ```bash
-claude mcp add code-map -- cortex-map-mcp
-claude mcp add forensic-audit -- cortex-forensic-mcp
+claude mcp add code-map -- vigil-mapper-mcp
+claude mcp add forensic-audit -- vigil-forensic-mcp
 ```
 
 Both commands are entry points installed by `pip install -e .`.
@@ -95,12 +95,12 @@ Both commands are entry points installed by `pip install -e .`.
   "mcpServers": {
     "code-map": {
       "type": "stdio",
-      "command": "cortex-map-mcp",
+      "command": "vigil-mapper-mcp",
       "args": []
     },
     "forensic-audit": {
       "type": "stdio",
-      "command": "cortex-forensic-mcp",
+      "command": "vigil-forensic-mcp",
       "args": []
     }
   }
@@ -195,7 +195,7 @@ still retrievable after the MCP server process restarts.
   job started without one keeps the legacy behaviour (lost on exit).
 - **Atomic mechanism.** Records are written via `tempfile.mkstemp` + `os.replace`
   under a per-job `filelock.FileLock` — the same atomic pattern as
-  `cortex_map_builder.map_storage`. `os.replace` is atomic on POSIX and Windows,
+  `vigil_mapper.map_storage`. `os.replace` is atomic on POSIX and Windows,
   so a reader never observes a half-written file. The terminal record is written
   to disk **before** the in-memory status flips to terminal, so disk is never
   behind what `get_*_status` reports.
@@ -225,7 +225,7 @@ The default delivery mode for both servers is **poll** (the client calls `get_*_
 The forensic auditor reads size/complexity thresholds from a **gate profile**. A
 default profile ships **inside the package** (so it is bundled in the wheel and
 available after `pip install`):
-[`cortex_forensic/gate_profile.json`](cortex_forensic/gate_profile.json).
+[`vigil_forensic/gate_profile.json`](vigil_forensic/gate_profile.json).
 Its only job is to cut **size-noise false-positives** — file-length,
 function-length, and nesting-depth warnings firing on legitimately large code —
 *without* hiding genuinely extreme outliers (a 2 000-line god-file still
@@ -233,21 +233,21 @@ surfaces).
 
 ### Where the profile is discovered
 
-`cortex_forensic.self_audit._load_gate_profile_if_present` looks, in order:
+`vigil_forensic.self_audit._load_gate_profile_if_present` looks, in order:
 
 1. `<audit-target>/gate_profile.json`
 2. `<audit-target>/.cortex/gate_profile.json`
 3. **ancestor walk** — the first `gate_profile.json` found in any parent
    directory of the audit target.
-4. **packaged default** — the profile shipped inside the `cortex_forensic`
+4. **packaged default** — the profile shipped inside the `vigil_forensic`
    package. This is the effective default for any target with no profile of its
    own and no ancestor profile (e.g. an arbitrary path audited after
    `pip install`), and is why a sub-package audit such as
-   `run_forensic_audit("cortex_forensic")` still picks up the shipped default.
+   `run_forensic_audit("vigil_forensic")` still picks up the shipped default.
 
 A target-local profile always wins over an ancestor or the packaged default. A
 missing or malformed profile is logged and skipped — never fatal. The
-**committed** default lives inside the package at `cortex_forensic/gate_profile.json`
+**committed** default lives inside the package at `vigil_forensic/gate_profile.json`
 so it ships in the wheel.
 
 ### How to set your own
@@ -255,7 +255,7 @@ so it ships in the wheel.
 Copy the shipped file to your project root and edit `size_thresholds`:
 
 ```bash
-cp cortex_forensic/gate_profile.json /path/to/your-project/gate_profile.json
+cp vigil_forensic/gate_profile.json /path/to/your-project/gate_profile.json
 # then edit size_thresholds to taste
 ```
 
@@ -285,8 +285,8 @@ MEDIUM-severity heads-up (advisory); `revise` = HIGH-severity "refactor now".
 
 | Audit target | total before | total after | `size.*` before | `size.*` after |
 |--------------|-------------:|------------:|----------------:|---------------:|
-| `cortex_forensic/`   | 125 | 86 | 92 | 55 |
-| `cortex_map_builder/`| 115 | 93 | 49 | 37 |
+| `vigil_forensic/`   | 125 | 86 | 92 | 55 |
+| `vigil_mapper/`| 115 | 93 | 49 | 37 |
 
 The remaining `size.*` findings are functions over 100 lines and nesting deeper
 than 5 — code that genuinely exceeds the published limits, which is the intended
@@ -392,7 +392,7 @@ items 6–7 in [`tests/test_dup_and_sqli.py`](tests/test_dup_and_sqli.py)):
    `gate_profile.json` previously fell back to the *strict* code-defaults
    (600/800/4) instead of the shipped defaults (750/1000/5). The loader
    (`self_audit._load_gate_profile_if_present`) now falls back to the package's
-   **own shipped** `gate_profile.json` (bundled INSIDE the `cortex_forensic`
+   **own shipped** `gate_profile.json` (bundled INSIDE the `vigil_forensic`
    package and resolved relative to the module, so it ships in the wheel) as the
    last resort. A target-local profile still wins.
 6. **`duplicate_scan` (near-duplicate code) per-line inflation.** The
@@ -443,7 +443,7 @@ items 6–7 in [`tests/test_dup_and_sqli.py`](tests/test_dup_and_sqli.py)):
    variants). The rule is deliberately conservative: a `print_*` function
    elsewhere in the file does **not** silence a stray `print()` in an unrelated
    normal function, and a genuine `print("DEBUG", x)` in ordinary code is still
-   flagged. On `cortex_forensic` itself this cut `debug_print_scan` **12 → 0**
+   flagged. On `vigil_forensic` itself this cut `debug_print_scan` **12 → 0**
    (all 12 were FPs: 10 in `print_human_summary()`, 2 in detector pattern
    tuples); the corpus oracle (`tests/oracle/sample_quality.py:63`) stays flagged.
    TDD'd in [`tests/test_debug_print_fp.py`](tests/test_debug_print_fp.py).
@@ -465,7 +465,7 @@ items 6–7 in [`tests/test_dup_and_sqli.py`](tests/test_dup_and_sqli.py)):
    (an assignment with an identifier LHS, a `def`/`class`/`import`/`func`/`const`
    header, a bare `name(...)` call statement, or a block-header line). A single
    keyword inside grammatical English is not a strong signal, so prose does not reach
-   the bar. On `cortex_forensic` itself this cut `commented_code_scan` **22 → 0**
+   the bar. On `vigil_forensic` itself this cut `commented_code_scan` **22 → 0**
    (all 22 were prose: design-rationale / FP-tightening notes that referenced code
    in backticks — verified by inspecting each block); the corpus oracle
    (`tests/oracle/sample_quality.py:69`, a genuine 5-line commented-out block) stays
@@ -563,7 +563,7 @@ A disabled gate never runs (produces no findings) and is reported in
 `meta["gates_skipped"]` with reason `"disabled_by_project"`:
 
 ```python
-from cortex_forensic import run_forensic_audit
+from vigil_forensic import run_forensic_audit
 
 res = run_forensic_audit("/path/to/project")
 # .cortex/disabled_gates.json contains ["broad_except"]
@@ -585,12 +585,12 @@ Behavior:
 - `.cortex/` is git-ignored by default in this repo's audit policy, so the file
   is a *local* opt-out unless you commit it deliberately.
 
-The same file is honored by the CLI (`python -m cortex_forensic.self_audit
+The same file is honored by the CLI (`python -m vigil_forensic.self_audit
 --project <dir>`).
 
-> Gate ids are the `check_id` values — run `python -m cortex_forensic.self_audit
+> Gate ids are the `check_id` values — run `python -m vigil_forensic.self_audit
 > --list-gates` to print the file-based gates, or read the `GATE_SPECS` table in
-> [`cortex_forensic/gate_packs/universal.py`](cortex_forensic/gate_packs/universal.py).
+> [`vigil_forensic/gate_packs/universal.py`](vigil_forensic/gate_packs/universal.py).
 > Note a *family* gate id (`broad_except`) and its sub-checks emitted under a
 > dotted child id (`broad_except.return_none`) are produced by the same runner;
 > disabling the family id (`broad_except`) stops that runner entirely. A
@@ -619,15 +619,15 @@ by the unfiltered HIGH/CRITICAL counts.
 
 There is **no plugin auto-discovery** — the gate set is the module-level
 `GATE_SPECS` tuple in
-[`cortex_forensic/gate_packs/universal.py`](cortex_forensic/gate_packs/universal.py),
+[`vigil_forensic/gate_packs/universal.py`](vigil_forensic/gate_packs/universal.py),
 resolved once at import into `DEFAULT_GATE_CHECKS`
-([`gate_registry.py`](cortex_forensic/gate_registry.py)). Registering a gate
+([`gate_registry.py`](vigil_forensic/gate_registry.py)). Registering a gate
 means adding a spec to that tuple. The spec shape is a 3-tuple:
 
 ```python
 (check_id, category, runner)
 #   │          │         └── Callable[[PostExecGateContext], GateCheckResult]
-#   │          └── a cortex_forensic._shared.GateCategory enum member
+#   │          └── a vigil_forensic._shared.GateCategory enum member
 #   └── str, the gate id (also the prefix for any dotted child ids it emits)
 ```
 
@@ -637,7 +637,7 @@ The **runner** takes the synthetic `PostExecGateContext` (its
 `GateCheckResult`:
 
 ```python
-from cortex_forensic._shared import (
+from vigil_forensic._shared import (
     GateCheckResult, GateFinding, GateCategory, GateSeverity,
     GateImpact, EvidenceReference,
 )
@@ -672,7 +672,7 @@ To wire it in (the supported path — edit the pack):
 1. Add `("no_print", GateCategory.REPORTING, run_no_print_checks)` to
    `GATE_SPECS` in `gate_packs/universal.py`.
 2. Add `"no_print"` to the `_FILE_BASED_GATES` allowlist in
-   [`cortex_forensic/self_audit.py`](cortex_forensic/self_audit.py) — the static
+   [`vigil_forensic/self_audit.py`](vigil_forensic/self_audit.py) — the static
    auditor only runs gate ids in that set (anything else is reported as
    `not_file_based` and skipped). A runtime-only gate would instead get a
    `skip_in_static` flag in `GATE_FLAGS`.
@@ -682,7 +682,7 @@ Each `GateFinding` is validated on construction: `confidence` must be in
 `applicability_reason` (see `GateFinding.__post_init__` in `_shared.py`).
 
 > If you must register a gate **without** editing the pack (e.g. a downstream
-> wrapper), `cortex_forensic.gate_registry.DEFAULT_GATE_CHECKS` is a plain tuple
+> wrapper), `vigil_forensic.gate_registry.DEFAULT_GATE_CHECKS` is a plain tuple
 > you can extend before calling `run_gates`, and `run_gates(..., gates_filter=…)`
 > selects a subset — but a new id still has to be present in `_FILE_BASED_GATES`
 > to run in static mode, so editing the pack is the honest, complete path.
@@ -698,7 +698,7 @@ real post-execution context (`artifact_refs`, `transport_mode`,
 reported-vs-observed changed files, validation-contract proofs, or a disk
 re-read compared against an expected hash) and are meaningless / false-positive
 prone without it. The runtime-only set is listed in
-[`forensic_cluster_runners/core.py`](cortex_forensic/gate_checks/forensic_cluster_runners/core.py)
+[`forensic_cluster_runners/core.py`](vigil_forensic/gate_checks/forensic_cluster_runners/core.py)
 as `_RUNTIME_ONLY_CLUSTERS` (`cluster2_success_without_proof`,
 `cluster3_proxy_as_truth`, `cluster4_config_accepted_ignored_*`,
 `cluster6_state_divergence`, `cluster7_fallback_hides_truth`,

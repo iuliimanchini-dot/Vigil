@@ -30,9 +30,9 @@ def _write_utf8_bom(path: Path, content: str) -> None:
 
 def _make_minimal_ctx(tmp_path: Path, touched_files=None, source_files=None):
     """Build a minimal PostExecGateContext for tests."""
-    from cortex_forensic.gate_models import PostExecGateContext, RuntimeState, VerificationSummary, detect_source_package_roots
-    from cortex_forensic._stubs import ValidationContractProfile, PocketCoderForensicReport
-    from cortex_forensic.gate_checks.common import normalize_path, read_snapshot
+    from vigil_forensic.gate_models import PostExecGateContext, RuntimeState, VerificationSummary, detect_source_package_roots
+    from vigil_forensic._stubs import ValidationContractProfile, PocketCoderForensicReport
+    from vigil_forensic.gate_checks.common import normalize_path, read_snapshot
 
     if source_files is None:
         source_files = []
@@ -68,7 +68,7 @@ class TestBomStripping:
 
     def test_bom_file_parsed_without_syntax_error(self, tmp_path):
         """A .py file starting with BOM must parse cleanly — no syntax error finding."""
-        from cortex_forensic.gate_checks.syntax_validity_checks import run_syntax_validity_checks
+        from vigil_forensic.gate_checks.syntax_validity_checks import run_syntax_validity_checks
 
         bom_file = tmp_path / "bom_module.py"
         _write_utf8_bom(bom_file, "def hello():\n    return 42\n")
@@ -82,8 +82,8 @@ class TestBomStripping:
 
     def test_bom_file_no_meta_syntax_parse_error(self, tmp_path):
         """BOM file must not trigger meta.syntax_parse_error from _ast_helpers."""
-        from cortex_forensic.gate_checks._ast_helpers import parse_python_source_or_emit_finding
-        from cortex_forensic.gate_checks.common import read_snapshot
+        from vigil_forensic.gate_checks._ast_helpers import parse_python_source_or_emit_finding
+        from vigil_forensic.gate_checks.common import read_snapshot
 
         bom_file = tmp_path / "bom_ast.py"
         _write_utf8_bom(bom_file, "x = 1\n")
@@ -100,7 +100,7 @@ class TestBomStripping:
 
     def test_non_bom_file_still_parses(self, tmp_path):
         """Regression: non-BOM valid Python must still parse cleanly."""
-        from cortex_forensic.gate_checks.syntax_validity_checks import run_syntax_validity_checks
+        from vigil_forensic.gate_checks.syntax_validity_checks import run_syntax_validity_checks
 
         clean_file = tmp_path / "clean.py"
         clean_file.write_text("def foo():\n    pass\n", encoding="utf-8")
@@ -116,8 +116,8 @@ class TestBomFingerprintDedup:
 
     def test_duplicate_fingerprint_collapses_to_one(self):
         """meta_findings dedup: identical (check_id, path, line) emitted twice → one finding."""
-        from cortex_forensic.meta_findings import emit_meta_finding, drain_meta_findings, reset_meta_findings
-        from cortex_forensic.gate_checks._ast_helpers import build_syntax_parse_error_finding
+        from vigil_forensic.meta_findings import emit_meta_finding, drain_meta_findings, reset_meta_findings
+        from vigil_forensic.gate_checks._ast_helpers import build_syntax_parse_error_finding
 
         reset_meta_findings()
         # Simulate same parse error from two different gates via the same helper
@@ -135,7 +135,7 @@ class TestBomFingerprintDedup:
 
         # Now test drain_meta_findings dedup (the actual fix):
         # Inject two findings with same fingerprint into the pending queue
-        from cortex_forensic import meta_findings as mf
+        from vigil_forensic import meta_findings as mf
         import threading
         with mf._lock:
             mf._pending.clear()
@@ -175,7 +175,7 @@ class TestDuplicationFullScanSkip:
 
     def test_full_scan_zero_cross_touched_findings(self, tmp_path):
         """17 identical dispatch wrappers in a full-scan → zero cross_touched_duplicate."""
-        from cortex_forensic.gate_checks.duplication_checks import run_duplication_checks
+        from vigil_forensic.gate_checks.duplication_checks import run_duplication_checks
 
         files = self._make_dispatch_wrappers(tmp_path, 17)
         # Full scan: touched_files == ALL source files (self_audit.py pattern)
@@ -191,7 +191,7 @@ class TestDuplicationFullScanSkip:
 
     def test_incremental_two_file_still_flags(self, tmp_path):
         """2-file incremental scan with a real duplicate → still flags it."""
-        from cortex_forensic.gate_checks.duplication_checks import run_duplication_checks
+        from vigil_forensic.gate_checks.duplication_checks import run_duplication_checks
 
         # Two files with identical functions; rest of project untouched
         for name in ("a.py", "b.py"):
@@ -226,7 +226,7 @@ class TestBroadExceptReturnNone:
     """Fix 3: _EXCEPT_RETURN_SENTINEL_RE must not fire on narrow except types."""
 
     def _run_checks_on_code(self, tmp_path: Path, code: str) -> list[Any]:
-        from cortex_forensic.gate_checks.broad_except_checks import run_broad_except_checks
+        from vigil_forensic.gate_checks.broad_except_checks import run_broad_except_checks
         f = tmp_path / "subject.py"
         f.write_text(code, encoding="utf-8")
         ctx = _make_minimal_ctx(tmp_path, source_files=["subject.py"])
@@ -323,7 +323,7 @@ class TestRepoProfileLoading:
         }
         proj = self._make_project_with_profile(tmp_path, profile_data)
 
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
         # Profile auto-discovery happens inside run_forensic_audit
         result = run_forensic_audit(proj)
         # The key assertion: no profile_load_failed meta finding
@@ -344,7 +344,7 @@ class TestRepoProfileLoading:
         (proj / "gate_profile.json").write_text(json.dumps(profile_data), encoding="utf-8")
         (proj / "main.py").write_text("x = 1\n", encoding="utf-8")
 
-        from cortex_forensic.self_audit import build_synthetic_context, discover_source_files
+        from vigil_forensic.self_audit import build_synthetic_context, discover_source_files
         source_files = discover_source_files(proj)
         ctx = build_synthetic_context(proj, source_files)
 
@@ -361,7 +361,7 @@ class TestRepoProfileLoading:
         proj.mkdir()
         (proj / "main.py").write_text("x = 1\n", encoding="utf-8")
 
-        from cortex_forensic.self_audit import build_synthetic_context, discover_source_files
+        from vigil_forensic.self_audit import build_synthetic_context, discover_source_files
         source_files = discover_source_files(proj)
         ctx = build_synthetic_context(proj, source_files)
         # No exception; packaged default profile is used when no file present.
@@ -380,7 +380,7 @@ class TestCancellation:
         """A pre-set cancel_event causes run_gates to stop before processing all gates."""
         (tmp_path / "main.py").write_text("x = 1\n", encoding="utf-8")
 
-        from cortex_forensic.self_audit import build_synthetic_context, discover_source_files, run_gates
+        from vigil_forensic.self_audit import build_synthetic_context, discover_source_files, run_gates
 
         source_files = discover_source_files(tmp_path)
         ctx = build_synthetic_context(tmp_path, source_files)
@@ -404,7 +404,7 @@ class TestCancellation:
         """run_forensic_audit must accept cancel_event kwarg without raising."""
         (tmp_path / "main.py").write_text("x = 1\n", encoding="utf-8")
 
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
         event = threading.Event()
         # Should not raise TypeError for unexpected keyword argument
         result = run_forensic_audit(tmp_path, cancel_event=event)
@@ -417,7 +417,7 @@ class TestCancellation:
             "def foo():\n    try:\n        pass\n    except:\n        pass\n",
             encoding="utf-8",
         )
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
         result = run_forensic_audit(tmp_path, cancel_event=None)
         assert isinstance(result, dict)
         # Should find the bare except

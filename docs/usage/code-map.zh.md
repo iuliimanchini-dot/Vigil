@@ -39,17 +39,17 @@
 
 目前这是一个**本地可编辑安装（editable install）**（尚未发布到 PyPI）。它在你安装它的那台机器上可用；发布到 PyPI 以便在其他机器上使用的工作仍在进行中。
 
-在 `cortex-codeintel` 仓库根目录下：
+在 `vigil` 仓库根目录下：
 
 ```bash
-pip install -e .   # 在 cortex-codeintel 仓库中执行
-claude mcp add code-map -s user -- <abs-path-to-venv-python> -m cortex_mcp.map_server
+pip install -e .   # 在 vigil 仓库中执行
+claude mcp add code-map -s user -- <abs-path-to-venv-python> -m vigil_mcp.map_server
 ```
 
 请将 `<abs-path-to-venv-python>` 替换为你虚拟环境中 Python 解释器的绝对路径，例如在 Windows 上：
 
 ```
-C:\Users\You\path\to\cortex-codeintel\.venv\Scripts\python.exe
+C:\Users\You\path\to\vigil\.venv\Scripts\python.exe
 ```
 
 添加之后，该服务器提供一套**后台任务 + 轮询**的 API。典型流程如下：

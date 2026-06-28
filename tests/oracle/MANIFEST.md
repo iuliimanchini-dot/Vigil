@@ -1,6 +1,6 @@
 # Oracle Corpus — Ground Truth Manifest
 
-A reusable regression fixture for the cortex_forensic auditor. Each sample file
+A reusable regression fixture for the vigil_forensic auditor. Each sample file
 contains **minimal, real instances** of a known problem class, marked on the
 offending line with `# EXPECT: <tag>`. `clean_control.py` is the idiomatic
 counterpart and **must produce zero findings** (false-positive control).
@@ -17,10 +17,10 @@ samples — all **Verified** by reading source and/or replicating the predicate:
 
 - **File naming.** Files are named `sample_*.py` / `clean_control.py`, NOT
   `test_*`. Most per-file checks skip basenames starting with `test_` /
-  `conftest` (e.g. [exception_boundary.py:63](../../cortex_forensic/gate_checks/forensic_clusters/exception_boundary.py),
-  [data_quality.py:48](../../cortex_forensic/gate_checks/forensic_clusters/data_quality.py)),
+  `conftest` (e.g. [exception_boundary.py:63](../../vigil_forensic/gate_checks/forensic_clusters/exception_boundary.py),
+  [data_quality.py:48](../../vigil_forensic/gate_checks/forensic_clusters/data_quality.py)),
   and `is_test_file` matches Python patterns `("test_", "_test.py")`
-  ([language_profiles.py:60](../../cortex_forensic/language_profiles.py)). The
+  ([language_profiles.py:60](../../vigil_forensic/language_profiles.py)). The
   directory `tests/` does **not** match `test_`, so these files are treated as
   ordinary source and the content checks run.
 - **SQL injection** (cluster 12, `security_scan`) is **AST-based**: the dynamic
@@ -28,27 +28,27 @@ samples — all **Verified** by reading source and/or replicating the predicate:
   the literal template must contain real SQL-clause structure
   (`SELECT … FROM \w`, `UPDATE … SET`, `DELETE FROM`, …), be ≥20 chars, and (for
   concat) have a non-literal operand
-  ([edit_mutation.py:166-305](../../cortex_forensic/gate_checks/forensic_clusters/edit_mutation.py)).
+  ([edit_mutation.py:166-305](../../vigil_forensic/gate_checks/forensic_clusters/edit_mutation.py)).
   All four SQLi samples use `SELECT * FROM <table> WHERE id=<interp>` so the
   structure regex matches. Verified by replicating the AST predicate: hits on
   lines 23, 28, 33, 38.
 - **eval/exec/os.system/pickle/yaml.load** fire on genuine AST `Call` nodes
-  ([edit_mutation.py:344-378](../../cortex_forensic/gate_checks/forensic_clusters/edit_mutation.py)).
+  ([edit_mutation.py:344-378](../../vigil_forensic/gate_checks/forensic_clusters/edit_mutation.py)).
   `shell=True` fires only when the callee is a subprocess launcher
-  (`run/Popen/call/...`) ([edit_mutation.py:309-407](../../cortex_forensic/gate_checks/forensic_clusters/edit_mutation.py)).
+  (`run/Popen/call/...`) ([edit_mutation.py:309-407](../../vigil_forensic/gate_checks/forensic_clusters/edit_mutation.py)).
   Verified: hits on 51, 55, 59, 63, 67, 71.
 - **missing_await** (cluster 42) flags only an un-awaited call to a same-module
   `async def` **from inside another async function**; module-level and
   sync-enclosing calls are skipped
-  ([async_quality.py:735-748](../../cortex_forensic/gate_checks/forensic_clusters/async_quality.py)).
+  ([async_quality.py:735-748](../../vigil_forensic/gate_checks/forensic_clusters/async_quality.py)).
   `consume()` awaits `warm_up()` (so it is not itself "pointless async") and
   leaves `load_rows()` un-awaited.
 - **Size/complexity** thresholds: `size.function_too_large` at ≥120 lines,
   `size.nesting_too_high` at nesting depth ≥6
-  ([size_complexity_checks.py:58-61,182,218](../../cortex_forensic/gate_checks/size_complexity_checks.py)).
+  ([size_complexity_checks.py:58-61,182,218](../../vigil_forensic/gate_checks/size_complexity_checks.py)).
   `oversized_pipeline` was generated at 133 lines; `deeply_nested` reaches
   `max_nesting_depth == 6` (verified with the real
-  [common.py:225 `max_nesting_depth`](../../cortex_forensic/gate_checks/common.py) logic).
+  [common.py:225 `max_nesting_depth`](../../vigil_forensic/gate_checks/common.py) logic).
 - **No collateral findings.** Each sample file was scanned (replicating the
   detector predicates) to confirm no *unintended* extra hits: no accidental
   4-line duplicate windows, no stray magic numbers in the generated structure
@@ -77,7 +77,7 @@ samples — all **Verified** by reading source and/or replicating the predicate:
 
 **Secret value — important for the reviewer.** The prompt asked for a `FAKE_`
 prefix to dodge commit secret-hooks, but the auditor's secrets check
-([code_style.py:73](../../cortex_forensic/gate_checks/forensic_clusters/code_style.py))
+([code_style.py:73](../../vigil_forensic/gate_checks/forensic_clusters/code_style.py))
 **skips any line containing** `example/placeholder/xxx/changeme/your_/test_key/<your/`**fake**.
 A line literally containing "fake" would be **suppressed** and never detected.
 To satisfy both constraints the value is a synthetic, token-shaped dummy
@@ -88,7 +88,7 @@ To satisfy both constraints the value is a synthetic, token-shaped dummy
 secret-scanners should not flag it. It is obviously not a live credential.
 
 `eval/exec/os.system/shell=True` may *also* be reported by the boundary
-cluster ([exception_boundary.py:198-209](../../cortex_forensic/gate_checks/forensic_clusters/exception_boundary.py))
+cluster ([exception_boundary.py:198-209](../../vigil_forensic/gate_checks/forensic_clusters/exception_boundary.py))
 under `boundary_validation_scan` — i.e. some lines can yield two findings from
 two clusters. That is correct behavior, not a duplicate sample.
 
@@ -114,10 +114,10 @@ two clusters. That is correct behavior, not a duplicate sample.
 
 > **`broad_swallow` maps to two different check_ids.** Line 28 (`pass`) is caught
 > by the *swallowed-exception* check (cluster 31, `exception_swallow_scan`,
-> [exception_boundary.py:87-104](../../cortex_forensic/gate_checks/forensic_clusters/exception_boundary.py)).
+> [exception_boundary.py:87-104](../../vigil_forensic/gate_checks/forensic_clusters/exception_boundary.py)).
 > Line 35 (log-only, no reraise) is **not** "swallowed" by cluster 31's
 > definition; it is caught by the *broad-catch-no-reraise* check (cluster 39,
-> `broad_catch_scan`, [async_quality.py:61-89](../../cortex_forensic/gate_checks/forensic_clusters/async_quality.py)).
+> `broad_catch_scan`, [async_quality.py:61-89](../../vigil_forensic/gate_checks/forensic_clusters/async_quality.py)).
 > Both are genuine instances of "broad exception handling that hides errors";
 > the reviewer may score them under either/both check_ids.
 
@@ -146,10 +146,10 @@ two clusters. That is correct behavior, not a duplicate sample.
 
 > **Duplication detail.** The intra-file near-duplicate check
 > (cluster 45 `assess_near_duplicate_code`,
-> [data_quality.py:133](../../cortex_forensic/gate_checks/forensic_clusters/data_quality.py))
+> [data_quality.py:133](../../vigil_forensic/gate_checks/forensic_clusters/data_quality.py))
 > fires on the shared 6-line body (≥4-line sliding window, ≥4 lines apart —
 > verified). The cross-file function-dup check
-> ([duplication_checks.py](../../cortex_forensic/gate_checks/duplication_checks.py))
+> ([duplication_checks.py](../../vigil_forensic/gate_checks/duplication_checks.py))
 > hashes whole functions but **skips `is_test_file`** (these files are not test
 > files) and is gated by touched-file-set size (full-scan clears the touched
 > hashes); so the cross-file `duplication.normalized_function` finding is
@@ -220,7 +220,7 @@ Constructs demonstrated:
 ## Samples flagged UNCERTAIN-to-detect (honest)
 
 1. **`dead_code` (sample_quality.py:46).** `assess_dead_code`
-   ([dead_code.py:55](../../cortex_forensic/gate_checks/forensic_clusters/dead_code.py))
+   ([dead_code.py:55](../../vigil_forensic/gate_checks/forensic_clusters/dead_code.py))
    consumes a `DeadCodeItem` list built upstream by **cross-file reference
    analysis** with classification heuristics (`__all__`, recency, framework
    decorators, "standalone" name markers, referenced-anywhere). It fires only
@@ -232,7 +232,7 @@ Constructs demonstrated:
    satisfies the documented conditions (≥3 lines, ≥2 code-indicator lines,
    ≤10 lines, not a docstring, not in the first 4 lines), but the detector uses
    a comment-body code-indicator heuristic
-   ([async_quality.py:336-480](../../cortex_forensic/gate_checks/forensic_clusters/async_quality.py))
+   ([async_quality.py:336-480](../../vigil_forensic/gate_checks/forensic_clusters/async_quality.py))
    that could classify differently than predicted.
 3. **`duplication` cross-file flavor (sample_structure.py:177/186).** The
    intra-file C45 finding is High confidence; the **cross-file**

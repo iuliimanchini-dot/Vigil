@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from cortex_forensic import run_forensic_audit
+from vigil_forensic import run_forensic_audit
 
 
 # ---------------------------------------------------------------------------

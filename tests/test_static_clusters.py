@@ -90,7 +90,7 @@ def config_dir():
 
 
 def _run_audit(project_dir: Path):
-    from cortex_forensic import run_forensic_audit
+    from vigil_forensic import run_forensic_audit
     # pip-audit shells out and is slow/networked; cluster17 self-skips on this.
     import os
     os.environ.setdefault("AI_HOST_SKIP_PIP_AUDIT", "1")
@@ -115,7 +115,7 @@ def _all_text(findings) -> str:
 class TestOracleRecall:
     def test_forensic_clusters_not_skipped_in_static(self):
         """The whole pack must no longer be force-skipped in static mode."""
-        from cortex_forensic.self_audit import _SKIP_IN_STATIC_MODE
+        from vigil_forensic.self_audit import _SKIP_IN_STATIC_MODE
         assert "forensic_clusters" not in _SKIP_IN_STATIC_MODE, (
             "forensic_clusters must run in static mode (with runtime-only "
             "sub-checks filtered) to provide static-safe findings"
@@ -200,7 +200,7 @@ class TestNoRuntimeFalsePositives:
     def test_runtime_only_clusters_filtered_when_no_artifact_refs(self, tmp_path: Path):
         """Directly exercise the runner: with a static context (no artifact_refs),
         the runtime-only clusters must be filtered out of execution."""
-        from cortex_forensic.gate_checks.forensic_cluster_runners import core as core_mod
+        from vigil_forensic.gate_checks.forensic_cluster_runners import core as core_mod
 
         # The module must expose the runtime-only set and a way to detect static.
         assert hasattr(core_mod, "_RUNTIME_ONLY_CLUSTERS"), (
@@ -215,8 +215,8 @@ class TestNoRuntimeFalsePositives:
     def test_filelock_no_runtime_fp(self):
         """Real third-party package (filelock): static run must not emit any
         runtime-only findings (mutation_verified/success_proof/state_divergence)."""
-        import cortex_forensic
-        repo_root = Path(cortex_forensic.__file__).resolve().parent.parent
+        import vigil_forensic
+        repo_root = Path(vigil_forensic.__file__).resolve().parent.parent
         filelock_dir = repo_root / ".venv" / "Lib" / "site-packages" / "filelock"
         if not filelock_dir.is_dir():
             pytest.skip("filelock not installed in .venv")

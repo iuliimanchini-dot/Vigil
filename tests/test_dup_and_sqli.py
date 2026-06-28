@@ -25,10 +25,10 @@ from pathlib import Path
 
 import pytest
 
-from cortex_forensic.gate_checks.forensic_clusters.data_quality import (
+from vigil_forensic.gate_checks.forensic_clusters.data_quality import (
     assess_near_duplicate_code,
 )
-from cortex_forensic.gate_checks.forensic_clusters.edit_mutation import (
+from vigil_forensic.gate_checks.forensic_clusters.edit_mutation import (
     assess_security_patterns,
 )
 
@@ -167,8 +167,8 @@ class TestNearDuplicateMerge:
         near-duplicate-logic findings. The bound (<=5) guards against any return
         of per-line inflation while allowing the corrected 0.
         """
-        import cortex_forensic
-        repo_root = Path(cortex_forensic.__file__).resolve().parent.parent
+        import vigil_forensic
+        repo_root = Path(vigil_forensic.__file__).resolve().parent.parent
         f = repo_root / ".venv" / "Lib" / "site-packages" / "filelock" / "asyncio.py"
         if not f.is_file():
             pytest.skip("filelock not installed in .venv")

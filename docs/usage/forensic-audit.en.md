@@ -60,17 +60,17 @@ It is **not** a test runner and **not** a linter replacement for style-only conc
 
 Currently this is a **local editable install** (it is not on PyPI yet). It works on the machine where you install it; publishing to PyPI for use on other machines is pending.
 
-From the `cortex-codeintel` repository root:
+From the `vigil` repository root:
 
 ```bash
-pip install -e .   # from the cortex-codeintel repo
-claude mcp add forensic-audit -s user -- <abs-path-to-venv-python> -m cortex_mcp.forensic_server
+pip install -e .   # from the vigil repo
+claude mcp add forensic-audit -s user -- <abs-path-to-venv-python> -m vigil_mcp.forensic_server
 ```
 
 Replace `<abs-path-to-venv-python>` with the absolute path to the Python interpreter in your virtual environment, e.g. on Windows:
 
 ```
-C:\Users\You\path\to\cortex-codeintel\.venv\Scripts\python.exe
+C:\Users\You\path\to\vigil\.venv\Scripts\python.exe
 ```
 
 Once added, the server exposes a **background job + poll** API. The typical flow is:

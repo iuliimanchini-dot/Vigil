@@ -24,7 +24,7 @@ Run:  pytest tests/test_debug_print_fp.py -v
 """
 from __future__ import annotations
 
-from cortex_forensic.gate_checks.forensic_clusters.async_quality import (
+from vigil_forensic.gate_checks.forensic_clusters.async_quality import (
     assess_debug_prints,
 )
 

@@ -40,8 +40,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cortex_map_builder.map_storage import seeds_dir
-from cortex_map_builder.runtime_builder import build_runtime_map_static
+from vigil_mapper.map_storage import seeds_dir
+from vigil_mapper.runtime_builder import build_runtime_map_static
 
 
 # ---------------------------------------------------------------------------

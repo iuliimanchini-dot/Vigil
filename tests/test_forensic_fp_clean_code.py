@@ -36,11 +36,11 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def _make_ctx(tmp_path: Path, source_files, touched_files=None):
-    from cortex_forensic.gate_models import (
+    from vigil_forensic.gate_models import (
         PostExecGateContext, RuntimeState, VerificationSummary, detect_source_package_roots,
     )
-    from cortex_forensic._stubs import ValidationContractProfile, PocketCoderForensicReport
-    from cortex_forensic.gate_checks.common import normalize_path, read_snapshot
+    from vigil_forensic._stubs import ValidationContractProfile, PocketCoderForensicReport
+    from vigil_forensic.gate_checks.common import normalize_path, read_snapshot
 
     if touched_files is None:
         touched_files = source_files
@@ -116,8 +116,8 @@ class TestBroadExceptReraise:
     )
 
     def _broad_findings(self, tmp_path: Path, code: str) -> list[Any]:
-        from cortex_forensic.gate_checks.broad_except_checks import run_broad_except_checks
-        from cortex_forensic.gate_checks.broad_except_hidden_sentinel_checks import (
+        from vigil_forensic.gate_checks.broad_except_checks import run_broad_except_checks
+        from vigil_forensic.gate_checks.broad_except_hidden_sentinel_checks import (
             run_broad_except_hidden_sentinel_checks,
         )
         name = _write(tmp_path, "subject.py", code)
@@ -160,7 +160,7 @@ class TestDuplicationTextBlock:
     """
 
     def _text_block_findings(self, tmp_path: Path, files) -> list[Any]:
-        from cortex_forensic.gate_checks.duplication_checks import run_duplication_checks
+        from vigil_forensic.gate_checks.duplication_checks import run_duplication_checks
         ctx = _make_ctx(tmp_path, files)
         return [
             f for f in run_duplication_checks(ctx).findings
@@ -234,7 +234,7 @@ class TestZoneGatesOptIn:
 
     def test_god_object_zones_marked_opt_in(self):
         """The zone gate must be registered as a noisy opt-in gate."""
-        from cortex_forensic.self_audit import _NOISY_OPT_IN_GATES
+        from vigil_forensic.self_audit import _NOISY_OPT_IN_GATES
         assert "god_object_zones" in _NOISY_OPT_IN_GATES, (
             "god_object_zones is a noisy name-prefix heuristic and must be "
             "registered opt-in (in _NOISY_OPT_IN_GATES)"
@@ -243,7 +243,7 @@ class TestZoneGatesOptIn:
     def test_god_object_zones_skipped_in_default_run_gates(self, tmp_path):
         """A default run_gates (no filter) must NOT run god_object_zones — it is
         reported in gates_skipped with reason 'opt_in_only'."""
-        from cortex_forensic.self_audit import (
+        from vigil_forensic.self_audit import (
             build_synthetic_context, discover_source_files, run_gates,
         )
         (tmp_path / "main.py").write_text("def acquire_x(): pass\n", encoding="utf-8")
@@ -274,7 +274,7 @@ class TestZoneGatesOptIn:
         code += body_pad + "\n"
         _write(tmp_path, "rwlock.py", code)
 
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
         result = run_forensic_audit(tmp_path)
         zone_ids = {"god_object_zones.zone_inflation", "size_complexity.zone_overload"}
         zone_findings = [f for f in result["findings"] if f["check_id"] in zone_ids]
@@ -294,7 +294,7 @@ class TestZoneGatesOptIn:
         code += body_pad + "\n"
         _write(tmp_path, "mega.py", code)
 
-        from cortex_forensic import run_forensic_audit
+        from vigil_forensic import run_forensic_audit
         result = run_forensic_audit(tmp_path, gates=["god_object_zones"])
         zone_findings = [
             f for f in result["findings"]
@@ -329,7 +329,7 @@ class TestApiSignatureNoGit:
     def test_variadic_api_not_flagged_without_git(self, tmp_path):
         """option(*param_decls, **attrs) with a 3-param docstring must NOT be
         flagged as '0 params vs 3 documented' when there is no git baseline."""
-        from cortex_forensic.gate_checks.contract_shape_drift_checks import (
+        from vigil_forensic.gate_checks.contract_shape_drift_checks import (
             run_contract_shape_drift_checks,
         )
         name = _write(tmp_path, "decorators.py", self._VARIADIC_API)
@@ -347,8 +347,8 @@ class TestApiSignatureNoGit:
     def test_no_git_emits_skip_meta_finding(self, tmp_path):
         """When the signature check is skipped for lack of a git baseline, that
         fact is surfaced once via a meta finding."""
-        from cortex_forensic.meta_findings import reset_meta_findings, drain_meta_findings
-        from cortex_forensic.gate_checks.contract_shape_drift_checks import (
+        from vigil_forensic.meta_findings import reset_meta_findings, drain_meta_findings
+        from vigil_forensic.gate_checks.contract_shape_drift_checks import (
             run_contract_shape_drift_checks,
         )
         reset_meta_findings()
@@ -374,7 +374,7 @@ class TestPackagedProfileFallback:
 
     def test_external_target_uses_packaged_profile(self, tmp_path):
         """Isolated dir outside the repo → loader returns the shipped profile."""
-        from cortex_forensic.self_audit import _load_gate_profile_if_present
+        from vigil_forensic.self_audit import _load_gate_profile_if_present
         proj = tmp_path / "isolated_ext"
         proj.mkdir()
         (proj / "main.py").write_text("x = 1\n", encoding="utf-8")
@@ -391,7 +391,7 @@ class TestPackagedProfileFallback:
         """A co-located profile must still take precedence over the packaged
         fallback."""
         import json as _json
-        from cortex_forensic.self_audit import _load_gate_profile_if_present
+        from vigil_forensic.self_audit import _load_gate_profile_if_present
         proj = tmp_path / "with_local"
         proj.mkdir()
         (proj / "gate_profile.json").write_text(

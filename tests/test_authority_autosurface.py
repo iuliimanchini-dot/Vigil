@@ -33,8 +33,8 @@ from pathlib import Path
 
 import pytest
 
-from cortex_map_builder.authority_builder import build_authority_map
-from cortex_map_builder.map_storage import seeds_dir
+from vigil_mapper.authority_builder import build_authority_map
+from vigil_mapper.map_storage import seeds_dir
 
 
 # ---------------------------------------------------------------------------

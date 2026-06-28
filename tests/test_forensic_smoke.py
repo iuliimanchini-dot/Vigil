@@ -1,4 +1,4 @@
-"""Smoke tests for cortex_forensic standalone package.
+"""Smoke tests for vigil_forensic standalone package.
 
 Tests:
 1. run_forensic_audit on a tmp project with a bare except: — returns findings
@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import pytest
 
-from cortex_forensic import run_forensic_audit
+from vigil_forensic import run_forensic_audit
 
 
 def _make_py_project(tmp_path: Path) -> Path:
