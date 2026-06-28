@@ -4,6 +4,32 @@ All notable changes to `vigil-codeintel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 uses [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] — 2026-06-29
+
+### Added
+- **`agent-brief`** — `get_code_map_results(view="brief")` synthesises an agent-facing
+  preflight briefing from the maps: entry points, state write-sites (check before
+  editing), riskiest files, conflicts, and a suggested read order. Hand it to an agent
+  before it edits an unfamiliar repo instead of letting it read everything.
+
+### Fixed
+- **ML gates were not running** in `run_forensic_audit` — the `ml.*` pack was defined but
+  never wired into the file-based gate set. Now fires (look-ahead, train/test leakage,
+  missing seed, non-deterministic split).
+- **`exception_swallow`** no longer flags idiomatic control-flow catches
+  (`except KeyboardInterrupt | BrokenPipeError | GeneratorExit | SystemExit: pass`).
+- Removed 75 unused imports (dead code) flagged by the tool on itself.
+
+### Changed
+- **Honest check count** — README and marketplace now state **190+ checks across ~110
+  families** (previously inconsistent "40+" vs "22").
+- **Python source adapter** now extracts contracts/runtime/writers via `ast` (parity with
+  the Go/Java/TS tree-sitter adapters; previously L1 stubs returning `[]`).
+- Forensic caller-search gates rebuilt around a single caller-index (O(N²)→O(N)) — large
+  monorepos no longer hang.
+- Docs: result-first README ("pre-action intelligence layer for coding agents"),
+  added `SECURITY.md` (static-only / no-network / `.cortex` privacy) and this changelog.
+
 ## [0.1.0] — 2026-06-28
 
 First public release.

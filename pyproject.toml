@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vigil-codeintel"
-version = "0.1.0"
+version = "0.1.1"
 description = "Multi-language code intelligence: structural mapper, forensic gate auditor, and two FastMCP stdio servers"
 requires-python = ">=3.10"
 license = {text = "MIT"}
