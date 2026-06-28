@@ -144,11 +144,12 @@ def _compact_map_entry(entry: Any) -> dict:
         entry.get("name") or entry.get("entity") or entry.get("target")
         or entry.get("node") or entry.get("subject") or entry.get("title")
         or entry.get("boundary_id") or entry.get("conflict_id")
-        or entry.get("finding_id")
+        or entry.get("finding_id") or entry.get("authority_domain")
     )
     file = (
         entry.get("file") or entry.get("defined_in")
-        or entry.get("canonical_schema") or entry.get("path")
+        or entry.get("canonical_schema") or entry.get("canonical_owner")
+        or entry.get("path")
     )
     compact: dict[str, Any] = {"name": name, "file": file}
     if entry.get("line") is not None:
