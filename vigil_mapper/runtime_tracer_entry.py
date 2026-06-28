@@ -8,7 +8,7 @@ It installs sys.settrace and a __import__ hook, runs the target module,
 captures all call events and import events, and writes a JSON file to
 the path given by --out.
 
-Safety net: refuses to run unless CORTEX_MAP_BUILDER_TRACE=1 is set
+Safety net: refuses to run unless VIGIL_MAPPER_TRACE=1 is set
 in the environment, preventing accidental in-process execution.
 
 Do NOT import this module. Do NOT add it to __all__ in __init__.py.
@@ -29,14 +29,14 @@ _log = logging.getLogger(__name__)
 
 def main() -> int:
     # ------------------------------------------------------------------
-    # Safety net: require CORTEX_MAP_BUILDER_TRACE=1.
+    # Safety net: require VIGIL_MAPPER_TRACE=1.
     # This prevents accidental execution in-process by parent code that
     # accidentally imports this module.
     # ------------------------------------------------------------------
-    if os.environ.get("CORTEX_MAP_BUILDER_TRACE") != "1":
+    if os.environ.get("VIGIL_MAPPER_TRACE") != "1":
         print(
             "ERROR: runtime_tracer_entry must only run as a subprocess with "
-            "CORTEX_MAP_BUILDER_TRACE=1 set. Refusing to execute.",
+            "VIGIL_MAPPER_TRACE=1 set. Refusing to execute.",
             file=sys.stderr,
         )
         return 2

@@ -58,7 +58,7 @@ BLOCKED_ENV: frozenset[str] = frozenset({
 def _build_sanitised_env(project_dir: Path | None) -> dict[str, str]:
     """Return os.environ copy with BLOCKED_ENV keys removed + tracer marker set."""
     env = {k: v for k, v in os.environ.items() if k not in BLOCKED_ENV}
-    env["CORTEX_MAP_BUILDER_TRACE"] = "1"
+    env["VIGIL_MAPPER_TRACE"] = "1"
 
     if project_dir is not None:
         existing_pp = env.get("PYTHONPATH", "")
@@ -139,7 +139,7 @@ def capture_startup_trace(
     # Create temp file. We close the fd immediately and pass the path to the
     # subprocess. The subprocess writes JSON there. We read it AFTER the
     # subprocess finishes (before we unlink).
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="cortex_trace_")
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="vigil_trace_")
     os.close(tmp_fd)
 
     argv = _build_argv(target_module, tmp_path, timeout_s, target_argv)

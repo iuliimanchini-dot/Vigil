@@ -366,7 +366,7 @@ class TestRepoProfileLoading:
         ctx = build_synthetic_context(proj, source_files)
         # No exception; packaged default profile is used when no file present.
         assert ctx.repo_profile is not None
-        assert ctx.repo_profile.profile_name == "cortex-default"
+        assert ctx.repo_profile.profile_name == "vigil-default"
 
 
 # ===========================================================================

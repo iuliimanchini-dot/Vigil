@@ -1,5 +1,5 @@
 {
-  "profile_name": "cortex-default",
+  "profile_name": "vigil-default",
   "version": "1.0",
   "_doc": "Default forensic gate profile. Size/complexity thresholds use industry-standard linter defaults to silence size-noise false-positives on legitimately large files. JSON forbids comments; the cited justification for every value lives in README.md ('Default gate profile' section). To override for your own repo, copy this file to <your-project>/gate_profile.json (or <your-project>/.cortex/gate_profile.json) and edit size_thresholds.",
   "size_thresholds": {

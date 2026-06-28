@@ -383,7 +383,7 @@ class TestPackagedProfileFallback:
             "External target with no ancestor profile must fall back to the "
             "package's shipped gate_profile.json (not None / strict code-defaults)"
         )
-        assert profile.profile_name == "cortex-default"
+        assert profile.profile_name == "vigil-default"
         assert profile.size_thresholds["file_warn"] == 750
         assert profile.size_thresholds["file_revise"] == 1000
 

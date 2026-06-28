@@ -136,7 +136,7 @@ def _finding_key(f: dict) -> tuple:
 
 def bench_target(name: str) -> dict:
     out: dict = {"target": name}
-    with tempfile.TemporaryDirectory(prefix=f"cortex_bench_{name}_") as td:
+    with tempfile.TemporaryDirectory(prefix=f"vigil_bench_{name}_") as td:
         proj = _copy_package(name, Path(td))
         nfiles, loc = _count_py(proj)
         out["py_files"] = nfiles

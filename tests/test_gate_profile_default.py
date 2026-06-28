@@ -116,12 +116,12 @@ class TestShippedDefaultProfile:
         # _probe_meta_integrity do; comments are not allowed.
         payload = json.loads(_SHIPPED_PROFILE.read_text(encoding="utf-8"))
         assert isinstance(payload, dict)
-        assert payload.get("profile_name") == "cortex-default"
+        assert payload.get("profile_name") == "vigil-default"
 
     def test_shipped_profile_loads_via_loader(self):
         profile = _load_gate_profile_if_present(_REPO_ROOT)
         assert profile is not None, "loader must find the repo-root gate_profile.json"
-        assert profile.profile_name == "cortex-default"
+        assert profile.profile_name == "vigil-default"
 
     def test_shipped_profile_thresholds_match_documented_values(self):
         profile = _load_gate_profile_if_present(_REPO_ROOT)
@@ -147,7 +147,7 @@ class TestAncestorWalkFallback:
         )
         profile = _load_gate_profile_if_present(target)
         assert profile is not None, "loader must find the in-package profile"
-        assert profile.profile_name == "cortex-default"
+        assert profile.profile_name == "vigil-default"
         assert Path(profile.profile_path).resolve() == _SHIPPED_PROFILE.resolve()
 
     def test_ancestor_walk_finds_default_for_subdir_without_profile(self, tmp_path):
@@ -179,7 +179,7 @@ class TestAncestorWalkFallback:
             "External target with no ancestor profile must fall back to the "
             "package's shipped gate_profile.json, not None / strict code-defaults"
         )
-        assert profile.profile_name == "cortex-default"
+        assert profile.profile_name == "vigil-default"
         assert profile.size_thresholds == _EXPECTED_THRESHOLDS
 
     def test_target_local_profile_wins_over_ancestor(self, tmp_path):
