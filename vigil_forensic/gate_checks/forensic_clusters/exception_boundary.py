@@ -51,6 +51,16 @@ def _is_swallowed(body: str) -> bool:
     return False
 
 
+# Control-flow exceptions that are idiomatically caught-and-passed (NOT swallowed
+# errors): broken pipe on closed stdout, clean Ctrl+C / shutdown, generator/async
+# teardown, iteration end. Flagging `except KeyboardInterrupt: pass` as a swallowed
+# error is a false positive.
+_CONTROL_FLOW_EXCEPTIONS = frozenset({
+    "KeyboardInterrupt", "BrokenPipeError", "GeneratorExit", "SystemExit",
+    "StopIteration", "StopAsyncIteration", "CancelledError",
+})
+
+
 def assess_exception_swallowing(file_path: str, content: str) -> list[GateFinding]:
     """Cluster 31: Detect swallowed exceptions."""
     import re
@@ -104,7 +114,9 @@ def assess_exception_swallowing(file_path: str, content: str) -> list[GateFindin
                 ))
         elif re.match(r'^except\s+\w', stripped):
             body = _extract_except_body(lines, i)
-            if body.strip() == "pass":
+            exc_m = re.match(r'^except\s+([\w.]+)', stripped)
+            caught = exc_m.group(1).split(".")[-1] if exc_m else ""
+            if body.strip() == "pass" and caught not in _CONTROL_FLOW_EXCEPTIONS:
                 detail = f"Exception caught and silently passed (line {i + 1}): {stripped[:60]}"
                 findings.append(build_finding(
                     check_id="exception_swallow_scan",
