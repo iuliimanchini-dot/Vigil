@@ -18,6 +18,7 @@ from .map_common import iter_py_files, iter_source_files
 from .map_errors import MapBuilderError
 from .map_models import DataContractEntry
 from .map_storage import seeds_dir
+from .source_adapters import get_adapter_for_file
 from ._ast_helpers_minimal import parse_python_source_or_emit_finding
 
 __all__ = ["build_data_contract_map"]
@@ -27,16 +28,15 @@ _log = logging.getLogger(__name__)
 _SOURCE = "static_scan"
 _CONFIDENCE = 0.85
 
-_DATACLASS_DECORATORS = frozenset({"dataclass", "dataclasses.dataclass"})
-_NAMEDTUPLE_BASES = frozenset({"NamedTuple", "typing.NamedTuple"})
-_TYPEDDICT_BASES = frozenset({"TypedDict", "typing.TypedDict"})
-_PYDANTIC_BASES = frozenset({"BaseModel", "pydantic.BaseModel"})
-_SERIALIZER_METHODS = frozenset({"to_dict", "to_json", "dict", "model_dump"})
-
-
 # ---------------------------------------------------------------------------
 # AST helpers
 # ---------------------------------------------------------------------------
+#
+# Entity detection + per-file shape/serializer extraction now lives in
+# PythonAdapter.extract_contracts (single extraction path). The former inline
+# helpers (_is_entity / _entity_kind / _extract_shape / _extract_serializer_shapes
+# and their frozenset constants) were removed when _scan_file was switched to the
+# adapter. _node_name remains: it is used by the cross-file writers/readers scan.
 
 def _node_name(node: ast.expr) -> str:
     if isinstance(node, ast.Name):
@@ -46,57 +46,6 @@ def _node_name(node: ast.expr) -> str:
     if isinstance(node, ast.Call):
         return _node_name(node.func)
     return ""
-
-
-def _is_entity(cls: ast.ClassDef) -> bool:
-    if any(_node_name(d) in _DATACLASS_DECORATORS for d in cls.decorator_list):
-        return True
-    bases = {_node_name(b) for b in cls.bases}
-    return bool(bases & (_NAMEDTUPLE_BASES | _TYPEDDICT_BASES | _PYDANTIC_BASES))
-
-
-def _entity_kind(cls: ast.ClassDef) -> str:
-    if any(_node_name(d) in _DATACLASS_DECORATORS for d in cls.decorator_list):
-        return "dataclass"
-    bases = {_node_name(b) for b in cls.bases}
-    if bases & _NAMEDTUPLE_BASES:
-        return "namedtuple"
-    if bases & _TYPEDDICT_BASES:
-        return "typeddict"
-    return "pydantic"
-
-
-def _extract_shape(cls: ast.ClassDef) -> dict[str, str]:
-    """Extract top-level annotated fields from class body only.
-
-    Iterates cls.body directly (not ast.walk) so that local AnnAssign
-    statements inside method bodies are never mistaken for class fields.
-    """
-    shape: dict[str, str] = {}
-    for stmt in cls.body:
-        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-            try:
-                ann = ast.unparse(stmt.annotation)
-            except Exception:
-                ann = "<unknown>"
-            shape[stmt.target.id] = ann
-    return shape
-
-
-def _extract_serializer_shapes(cls: ast.ClassDef) -> dict[str, list[str]]:
-    result: dict[str, list[str]] = {}
-    for stmt in cls.body:
-        if not isinstance(stmt, ast.FunctionDef) or stmt.name not in _SERIALIZER_METHODS:
-            continue
-        keys = [
-            k.value
-            for node in ast.walk(stmt)
-            if isinstance(node, ast.Dict)
-            for k in node.keys
-            if isinstance(k, ast.Constant) and isinstance(k.value, str)
-        ]
-        result[stmt.name] = keys
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +184,17 @@ def _load_priorities(project_dir: Path) -> frozenset[str]:
 # Per-file scan
 # ---------------------------------------------------------------------------
 
+# Adapter contract_kind -> legacy entity-dict kind (the value embedded in
+# variant JSON; baseline uses the legacy spelling). Keeps output identical
+# now that Python entity detection flows through PythonAdapter.extract_contracts.
+_ADAPTER_KIND_TO_LEGACY: dict[str, str] = {
+    "dataclass": "dataclass",
+    "NamedTuple": "namedtuple",
+    "TypedDict": "typeddict",
+    "pydantic_model": "pydantic",
+}
+
+
 def _scan_file(py_file: Path, project_dir: Path, *, syntax_error_sink=None, source: str | None = None) -> list[dict]:
     if source is None:
         try:
@@ -248,6 +208,8 @@ def _scan_file(py_file: Path, project_dir: Path, *, syntax_error_sink=None, sour
         rel_path_for_meta = py_file.as_posix()
 
     # B4 (2026-04-23): replaces silent `except SyntaxError: return []`.
+    # We still parse here (not just for entity detection) so broken .py files
+    # surface as meta.syntax_parse_error findings via the sink.
     tree = parse_python_source_or_emit_finding(
         source,
         rel_path=rel_path_for_meta,
@@ -263,16 +225,31 @@ def _scan_file(py_file: Path, project_dir: Path, *, syntax_error_sink=None, sour
     except ValueError:
         rel = py_file.as_posix()
 
+    # Entity detection + per-file shape/serializer extraction is delegated to the
+    # Python source adapter (single extraction path; PythonAdapter.extract_contracts
+    # now carries the same richness as the former inline _is_entity/_entity_kind/
+    # _extract_shape/_extract_serializer_shapes). Cross-file aggregation (writers,
+    # readers, drift, canonical) stays in build_data_contract_map below.
+    adapter = get_adapter_for_file(py_file)
+    if adapter is None or not getattr(adapter, "supports_contracts", False):
+        return []
+    candidates = adapter.extract_contracts(source, py_file)
+
     result = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and _is_entity(node):
-            result.append({
-                "name": node.name,
-                "kind": _entity_kind(node),
-                "path": rel,
-                "shape": _extract_shape(node),
-                "serializer_shapes": _extract_serializer_shapes(node),
-            })
+    for cand in candidates:
+        legacy_kind = _ADAPTER_KIND_TO_LEGACY.get(cand.contract_kind)
+        if legacy_kind is None:
+            # Unknown contract_kind from a future adapter pattern -- skip rather
+            # than emit a mislabelled entity.
+            _log.debug("_scan_file: skipping unmapped contract_kind %r for %s", cand.contract_kind, cand.name)
+            continue
+        result.append({
+            "name": cand.name,
+            "kind": legacy_kind,
+            "path": rel,
+            "shape": dict(cand.shape),
+            "serializer_shapes": {k: list(v) for k, v in cand.serializer_shapes.items()},
+        })
     return result
 
 

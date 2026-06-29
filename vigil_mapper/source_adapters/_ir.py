@@ -8,7 +8,7 @@ L2+: builders switch to consuming IR signals via adapter dispatch.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 _log = logging.getLogger(__name__)
 
@@ -74,12 +74,24 @@ class ContractCandidate:
                        ``"NamedTuple"``, ``"pydantic_model"``.
         line: 1-based line number.
         confidence: Extraction confidence in [0.0, 1.0].
+        shape: Optional mapping of field-name -> annotation string for the
+               entity's top-level annotated fields.  Populated by adapters that
+               can resolve member types (PythonAdapter); empty for regex
+               adapters (Go/Java/TS) that only detect the entity name+kind.
+        serializer_shapes: Optional mapping of serializer-method-name -> list of
+               literal string dict keys produced by that method (e.g. ``to_dict``
+               returning ``{"a": ...}`` -> ``{"to_dict": ["a"]}``).  Empty for
+               adapters that do not analyse serializer bodies.
     """
 
     name: str
     contract_kind: str
     line: int
     confidence: float
+    # Optional richer fields (additive; default empty so existing regex adapters
+    # and their parity tests are unaffected).
+    shape: "dict[str, str]" = field(default_factory=dict)
+    serializer_shapes: "dict[str, list[str]]" = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

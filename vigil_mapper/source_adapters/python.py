@@ -218,8 +218,58 @@ class PythonAdapter(RegexAdapterBase):
     # Contracts: @dataclass / NamedTuple / TypedDict / pydantic.BaseModel
     # ------------------------------------------------------------------
 
+    # Serializer methods whose bodies are scanned for emitted dict keys.
+    # Mirrors data_contract_builder._SERIALIZER_METHODS exactly.
+    _SERIALIZER_METHODS = frozenset({"to_dict", "to_json", "dict", "model_dump"})
+
+    @staticmethod
+    def _contract_shape(cls: ast.ClassDef) -> "dict[str, str]":
+        """Top-level annotated fields of *cls* -> {field: annotation}.
+
+        Iterates ``cls.body`` directly (NOT ast.walk) so AnnAssign statements
+        inside method bodies are never mistaken for class fields.  Identical to
+        data_contract_builder._extract_shape.
+        """
+        shape: dict[str, str] = {}
+        for stmt in cls.body:
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                try:
+                    ann = ast.unparse(stmt.annotation)
+                except Exception:
+                    ann = "<unknown>"
+                shape[stmt.target.id] = ann
+        return shape
+
+    @classmethod
+    def _contract_serializer_shapes(cls, node: ast.ClassDef) -> "dict[str, list[str]]":
+        """Serializer-method -> emitted literal string dict keys.
+
+        Identical to data_contract_builder._extract_serializer_shapes.
+        """
+        result: dict[str, list[str]] = {}
+        for stmt in node.body:
+            if not isinstance(stmt, ast.FunctionDef) or stmt.name not in cls._SERIALIZER_METHODS:
+                continue
+            keys = [
+                k.value
+                for n in ast.walk(stmt)
+                if isinstance(n, ast.Dict)
+                for k in n.keys
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)
+            ]
+            result[stmt.name] = keys
+        return result
+
     def extract_contracts(self, content: str, path: Path) -> list[ContractCandidate]:
-        """Detect data-contract classes via ``ast`` (parity with Go/Java/TS)."""
+        """Detect data-contract classes via ``ast`` (parity with Go/Java/TS).
+
+        Emits a ``ContractCandidate`` per detected entity, populated with the
+        full per-file richness the data_contract map builder historically
+        extracted via its internal ``_scan_file`` (``shape`` of top-level
+        annotated fields + ``serializer_shapes`` of ``to_dict``/``to_json``/
+        ``dict``/``model_dump`` methods).  Cross-file aggregation (writers,
+        readers, drift, canonical selection) remains the builder's job.
+        """
         try:
             tree = ast.parse(content)
         except SyntaxError:
@@ -248,7 +298,12 @@ class PythonAdapter(RegexAdapterBase):
                         break
             if kind:
                 out.append(ContractCandidate(
-                    name=node.name, contract_kind=kind, line=node.lineno, confidence=1.0,
+                    name=node.name,
+                    contract_kind=kind,
+                    line=node.lineno,
+                    confidence=1.0,
+                    shape=self._contract_shape(node),
+                    serializer_shapes=self._contract_serializer_shapes(node),
                 ))
         return out
 
