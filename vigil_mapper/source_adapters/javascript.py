@@ -61,6 +61,7 @@ from ._treesitter import (
     parse_bytes,
     walk_named,
 )
+from ._ts_target_resolution import resolve_fs_writers
 
 __all__ = ["JavascriptAdapter"]
 
@@ -502,13 +503,13 @@ class JavascriptAdapter(RegexAdapterBase):
     ) -> list[AuthorityWriteCandidate]:
         """Detect write operations in JavaScript source via tree-sitter AST.
 
-        Walks all ``call_expression`` nodes and matches by function shape:
-
         ``member_expression`` (object.property):
         - ``fs.writeFile`` / ``fs.writeFileSync``
-              → ``write_kind="fs_write"``, target_hint = first arg
+              → ``write_kind="fs_write"``, target resolved
         - ``fs.appendFile`` / ``fs.appendFileSync``
-              → ``write_kind="fs_append"``, target_hint = first arg
+              → ``write_kind="fs_append"``, target resolved
+        - ``fs.createWriteStream``
+              → ``write_kind="fs_write"``, target resolved
         - ``localStorage.setItem`` / ``sessionStorage.setItem``
               → ``write_kind="storage_write"``, target_hint = first arg
         - ``*.save`` / ``*.create``  (ORM — any receiver)
@@ -518,7 +519,23 @@ class JavascriptAdapter(RegexAdapterBase):
 
         ``identifier`` (standalone call):
         - ``writeFile(...)``
-              → ``write_kind="fs_write"``, target_hint = first arg
+              → ``write_kind="fs_write"``, target resolved
+
+        Target resolution (additive — mirrors the Go PoC / Python resolver).
+        The fs-family path-argument writers resolve their first argument into
+        ``resolved_target`` + ``provenance`` via the shared tree-sitter resolver
+        (``resolve_fs_writers`` — TS/JS share the grammar):
+
+        - string-literal arg     → literal, ``provenance="string_literal"``
+        - ``path.join(...)`` arg → joined path, ``provenance="path_constructor"``
+        - variable arg           → traced to its ``const``/``let``/``var`` init in
+          scope (string literal or ``path.join`` of literals)
+        - parameter arg          → ``provenance="function_parameter"`` (target stays
+          the ``__unknown_target__`` sentinel — no guess)
+        - unresolvable           → ``resolved_target="__unknown_target__"`` / unknown
+
+        The storage / ORM patterns carry no resolvable file-path target and keep
+        the ``__unknown_target__`` / unknown defaults.
 
         Test files (``*.test.js``, ``*.spec.js``, paths containing
         ``__tests__/``) return ``[]``.
@@ -549,78 +566,60 @@ class JavascriptAdapter(RegexAdapterBase):
             named = [c for c in args_node.children if c.is_named]
             return node_text(named[0], src) if named else ""
 
+        # fs-family path-argument writers (fs.writeFile/append/createWriteStream
+        # + bare writeFile) — resolved via the shared tree-sitter resolver. All
+        # carry confidence=1.0 to preserve JS adapter behaviour.
+        for w in resolve_fs_writers(self.language, content):
+            candidates.append(AuthorityWriteCandidate(
+                write_kind=w["write_kind"],
+                target_hint=w["target_hint"],
+                line=w["line"],
+                confidence=1.0,
+                resolved_target=w["resolved_target"],
+                provenance=w["provenance"],
+            ))
+
+        # Storage / ORM patterns (no resolvable file-path target).
         for call in walk_named(root, "call_expression"):
             fn = call.child_by_field_name("function")
             args = call.child_by_field_name("arguments")
-            if fn is None:
+            if fn is None or fn.type != "member_expression":
                 continue
 
+            obj = fn.child_by_field_name("object")
+            prop = fn.child_by_field_name("property")
+            if obj is None or prop is None:
+                continue
+            receiver = node_text(obj, src)
+            method = node_text(prop, src)
             line = node_line(call)
 
-            if fn.type == "member_expression":
-                obj = fn.child_by_field_name("object")
-                prop = fn.child_by_field_name("property")
-                if obj is None or prop is None:
-                    continue
-                receiver = node_text(obj, src)
-                method = node_text(prop, src)
+            # localStorage.setItem / sessionStorage.setItem
+            if method == "setItem" and receiver in ("localStorage", "sessionStorage"):
+                candidates.append(AuthorityWriteCandidate(
+                    write_kind="storage_write",
+                    target_hint=_hint(_first_arg_text(args)),
+                    line=line,
+                    confidence=1.0,
+                ))
 
-                # fs.writeFile / fs.writeFileSync
-                if method in ("writeFile", "writeFileSync") and receiver == "fs":
-                    candidates.append(AuthorityWriteCandidate(
-                        write_kind="fs_write",
-                        target_hint=_hint(_first_arg_text(args)),
-                        line=line,
-                        confidence=1.0,
-                    ))
+            # *.save / *.create (ORM)
+            elif method in ("save", "create"):
+                candidates.append(AuthorityWriteCandidate(
+                    write_kind="orm_save",
+                    target_hint=_hint(receiver),
+                    line=line,
+                    confidence=1.0,
+                ))
 
-                # fs.appendFile / fs.appendFileSync
-                elif method in ("appendFile", "appendFileSync") and receiver == "fs":
-                    candidates.append(AuthorityWriteCandidate(
-                        write_kind="fs_append",
-                        target_hint=_hint(_first_arg_text(args)),
-                        line=line,
-                        confidence=1.0,
-                    ))
-
-                # localStorage.setItem / sessionStorage.setItem
-                elif method == "setItem" and receiver in ("localStorage", "sessionStorage"):
-                    candidates.append(AuthorityWriteCandidate(
-                        write_kind="storage_write",
-                        target_hint=_hint(_first_arg_text(args)),
-                        line=line,
-                        confidence=1.0,
-                    ))
-
-                # *.save / *.create (ORM)
-                elif method in ("save", "create"):
-                    candidates.append(AuthorityWriteCandidate(
-                        write_kind="orm_save",
-                        target_hint=_hint(receiver),
-                        line=line,
-                        confidence=1.0,
-                    ))
-
-                # *.update (ORM)
-                elif method == "update":
-                    candidates.append(AuthorityWriteCandidate(
-                        write_kind="orm_write",
-                        target_hint=_hint(receiver),
-                        line=line,
-                        confidence=1.0,
-                    ))
-
-            elif fn.type == "identifier":
-                fn_name = node_text(fn, src)
-
-                # standalone writeFile(...)
-                if fn_name == "writeFile":
-                    candidates.append(AuthorityWriteCandidate(
-                        write_kind="fs_write",
-                        target_hint=_hint(_first_arg_text(args)),
-                        line=line,
-                        confidence=1.0,
-                    ))
+            # *.update (ORM)
+            elif method == "update":
+                candidates.append(AuthorityWriteCandidate(
+                    write_kind="orm_write",
+                    target_hint=_hint(receiver),
+                    line=line,
+                    confidence=1.0,
+                ))
 
         candidates.sort(key=lambda c: (c.line, c.write_kind))
         return candidates
