@@ -52,6 +52,7 @@ from ._treesitter import (
     parse_bytes,
     walk_named,
 )
+from ._ts_target_resolution import resolve_fs_writers
 
 _TS_LANGUAGE = "typescript"
 
@@ -118,19 +119,13 @@ class TypescriptAdapter(RegexAdapterBase):
     # ------------------------------------------------------------------
     # Authority write patterns (L7a)
     # ------------------------------------------------------------------
+    # NOTE: the fs-family path-argument writers (fs.writeFile/writeFileSync/
+    # appendFile/appendFileSync/createWriteStream + bare writeFile) are handled
+    # by the shared tree-sitter resolver (``resolve_fs_writers``) so the write
+    # TARGET can be resolved (string literal / path.join / traced variable /
+    # parameter).  Regex cannot do that — ``strip_comments_and_strings`` blanks
+    # string literals, losing the path — so those former patterns are gone.
 
-    # fs.writeFile / fs.writeFileSync
-    _RE_FS_WRITE = re.compile(
-        r"\bfs\.writeFile(?:Sync)?\s*\(([^,)]{0,60})",
-    )
-    # standalone writeFile / writeFileSync (no fs. prefix)
-    _RE_STANDALONE_WRITE = re.compile(
-        r"(?<![.\w])writeFile(?:Sync)?\s*\(([^,)]{0,60})",
-    )
-    # fs.appendFile / fs.appendFileSync
-    _RE_FS_APPEND = re.compile(
-        r"\bfs\.appendFile(?:Sync)?\s*\(([^,)]{0,60})",
-    )
     # .save( / .save() — on any receiver
     _RE_ORM_SAVE = re.compile(
         r"\.\s*save\s*\(\s*",
@@ -294,6 +289,7 @@ class TypescriptAdapter(RegexAdapterBase):
         Detected patterns and confidence:
             - ``fs.writeFile(``, ``fs.writeFileSync(``       -> fs_write,   0.9
             - ``fs.appendFile(``, ``fs.appendFileSync(``     -> fs_append,  0.9
+            - ``fs.createWriteStream(``                      -> fs_write,   0.9
             - standalone ``writeFile(``, ``writeFileSync(``  -> fs_write,   0.85
             - ``.save(``                                     -> orm_save,   0.75
             - ``repo.create(``, ``db.update(`` etc.          -> orm_write,  0.7
@@ -301,8 +297,25 @@ class TypescriptAdapter(RegexAdapterBase):
             - ``supabase.from(...).insert/update/...``        -> supabase_write, 0.85
             - ``localStorage.setItem(``, ``sessionStorage.setItem(`` -> storage_write, 0.7
 
+        Target resolution (additive — mirrors the Go PoC / Python resolver).
+        The fs-family path-argument writers (``writeFile`` / ``writeFileSync`` /
+        ``appendFile`` / ``appendFileSync`` / ``createWriteStream``) resolve their
+        first argument into ``resolved_target`` + ``provenance`` via tree-sitter
+        (on the RAW content, not the comment/string-stripped text):
+
+        - string-literal arg     → literal, ``provenance="string_literal"``
+        - ``path.join(...)`` arg → joined path, ``provenance="path_constructor"``
+        - variable arg           → traced to its ``const``/``let``/``var`` init in
+          scope (string literal or ``path.join`` of literals)
+        - parameter arg          → ``provenance="function_parameter"`` (target stays
+          the ``__unknown_target__`` sentinel — no guess)
+        - unresolvable           → ``resolved_target="__unknown_target__"`` / unknown
+
+        The ORM / prisma / supabase / storage patterns carry no resolvable
+        file-path target and keep ``__unknown_target__`` / unknown defaults.
+
         HTTP .put() / .post() on fetch/axios are intentionally excluded (too noisy).
-        Uses ``_preprocess`` before matching.
+        Uses ``_preprocess`` before matching the non-fs (regex) patterns.
         Sorted by ``(line, write_kind)``.
         """
         _log.debug("extract_writer_calls: %s (%d chars)", path, len(content))
@@ -315,32 +328,17 @@ class TypescriptAdapter(RegexAdapterBase):
             h = group_text.strip().strip("\"'`").strip()
             return h[:30]
 
-        # fs.writeFile / fs.writeFileSync
-        for m in self._RE_FS_WRITE.finditer(cleaned):
+        # fs-family path-argument writers (fs.writeFile/append/createWriteStream
+        # + bare writeFile) — resolved via tree-sitter on the RAW content so the
+        # literal path (blanked by strip_comments_and_strings) is recoverable.
+        for w in resolve_fs_writers(self.language, content):
             candidates.append(AuthorityWriteCandidate(
-                write_kind="fs_write",
-                target_hint=_hint(m.group(1)),
-                line=self._line_of(m.start(), cleaned),
-                confidence=0.9,
-            ))
-
-        # fs.appendFile / fs.appendFileSync
-        for m in self._RE_FS_APPEND.finditer(cleaned):
-            candidates.append(AuthorityWriteCandidate(
-                write_kind="fs_append",
-                target_hint=_hint(m.group(1)),
-                line=self._line_of(m.start(), cleaned),
-                confidence=0.9,
-            ))
-
-        # standalone writeFile / writeFileSync (no fs. prefix — already caught above via fs.*)
-        # Use negative lookbehind in pattern so fs.writeFile is not double-counted.
-        for m in self._RE_STANDALONE_WRITE.finditer(cleaned):
-            candidates.append(AuthorityWriteCandidate(
-                write_kind="fs_write",
-                target_hint=_hint(m.group(1)),
-                line=self._line_of(m.start(), cleaned),
-                confidence=0.85,
+                write_kind=w["write_kind"],
+                target_hint=w["target_hint"],
+                line=w["line"],
+                confidence=0.85 if w["standalone"] else 0.9,
+                resolved_target=w["resolved_target"],
+                provenance=w["provenance"],
             ))
 
         # prisma.X.create/update/upsert/delete

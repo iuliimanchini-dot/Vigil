@@ -58,6 +58,20 @@ _TYPE_DECL_NODES = frozenset({
     "annotation_type_declaration",
 })
 
+# Target-resolution constants (mirror the Go adapter / _authority_ast.py
+# provenance vocabulary so every adapter speaks the same provenance levels).
+_UNKNOWN_TARGET = "__unknown_target__"
+_PROVENANCE_PATH_CONSTRUCTOR = "path_constructor"  # Paths.get(...), Path.of("a","b")
+_PROVENANCE_STRING_LITERAL = "string_literal"      # "literal_path"
+_PROVENANCE_FUNCTION_PARAM = "function_parameter"  # void f(String target)
+_PROVENANCE_UNKNOWN = "unknown"
+
+# Java path-builder selectors whose all-string-literal args join into one path.
+# ``Path.of("a", "b")`` and ``Paths.get("a", "b")`` are the canonical forms; a
+# single-arg ``Path.of("literal.txt")`` is treated as the bare literal itself.
+_PATH_BUILDER_RECEIVERS = frozenset({"Path", "Paths"})
+_PATH_BUILDER_METHODS = frozenset({"of", "get"})
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -134,6 +148,199 @@ def _name_from_decl(decl_node, src: bytes) -> str:
         if child.type == "identifier" and child.is_named:
             return node_text(child, src)
     return ""
+
+
+# ---------------------------------------------------------------------------
+# Target resolution (Java write-site analysis -- mirrors the Go PoC)
+# ---------------------------------------------------------------------------
+
+def _string_literal_value(node, src: bytes) -> str | None:
+    """Return the bare value of a Java ``string_literal`` node, else None.
+
+    The bare value lives in the ``string_fragment`` child; an empty literal
+    ``""`` has no fragment and returns "".  Non-string nodes return None.
+    """
+    if node is None or node.type != "string_literal":
+        return None
+    for child in node.children:
+        if child.type == "string_fragment":
+            return node_text(child, src)
+    return ""  # empty literal: ""
+
+
+def _is_plausible_path(s: str) -> bool:
+    """True iff *s* looks like a file path (mirror of the Go/Python guard).
+
+    Rejects empty / oversized / multi-line strings.  Bare well-known filenames
+    are valid targets; otherwise the string must contain a path-like character
+    (``/``, ``\\`` or ``.``).
+    """
+    if not s or len(s) > 512:
+        return False
+    if "\n" in s or "\r" in s:
+        return False
+    if Path(s).name in {"Makefile", "Dockerfile", "Procfile", "LICENSE", "README"}:
+        return True
+    if "/" not in s and "\\" not in s and "." not in s:
+        return False
+    return True
+
+
+def _resolve_path_builder(call_node, src: bytes) -> str | None:
+    """Resolve ``Path.of("a","b")`` / ``Paths.get("a","b")`` to ``"a/b"``.
+
+    Best-effort: joins consecutive STRING-LITERAL arguments with ``/``.  A
+    single literal argument resolves to that literal (so ``Path.of("x.txt")``
+    behaves like the bare literal).  Returns None when the node is not a
+    ``Path.of`` / ``Paths.get`` invocation or any argument is a non-literal
+    (variable, nested call, etc.) -> cannot fully resolve (no guess).
+    """
+    if call_node is None or call_node.type != "method_invocation":
+        return None
+    obj = call_node.child_by_field_name("object")
+    name = call_node.child_by_field_name("name")
+    if obj is None or name is None:
+        return None
+    if (
+        node_text(obj, src) not in _PATH_BUILDER_RECEIVERS
+        or node_text(name, src) not in _PATH_BUILDER_METHODS
+    ):
+        return None
+
+    args = call_node.child_by_field_name("arguments")
+    if args is None:
+        return None
+    parts: list[str] = []
+    for arg in args.children:
+        if not arg.is_named:
+            continue
+        lit = _string_literal_value(arg, src)
+        if lit is None:
+            return None  # non-literal segment -> cannot fully resolve
+        parts.append(lit)
+    if not parts:
+        return None
+    return "/".join(parts)
+
+
+def _value_provenance(value_node, src: bytes) -> tuple[str, str] | None:
+    """Map a single RHS / argument expression node to (path, provenance).
+
+    Returns None when the node does not yield a resolvable path.
+    Resolution order: bare string literal -> Path.of/Paths.get builder.
+    """
+    if value_node is None:
+        return None
+    lit = _string_literal_value(value_node, src)
+    if lit is not None and lit != "":
+        return (lit, _PROVENANCE_STRING_LITERAL)
+    if value_node.type == "method_invocation":
+        # Single-arg Path.of("x.txt") -> string_literal; multi-arg -> constructor.
+        built = _resolve_path_builder(value_node, src)
+        if built is not None:
+            args = value_node.child_by_field_name("arguments")
+            n = len([c for c in args.children if c.is_named]) if args else 0
+            prov = _PROVENANCE_STRING_LITERAL if n == 1 else _PROVENANCE_PATH_CONSTRUCTOR
+            return (built, prov)
+    return None
+
+
+def _collect_java_assignments(root, src: bytes) -> dict[str, tuple[str, str]]:
+    """Return ``name -> (resolved_path, provenance)`` for the whole file.
+
+    Two passes, mirroring the Go/Python resolver:
+      PASS 1 (lower precedence): method PARAMETERS -> ("", function_parameter).
+      PASS 2 (higher precedence): local-variable initializers overwrite params.
+
+    Local forms handled (value must be a single resolvable expression):
+      - ``Path p = Path.of("x.txt");``        -> string_literal
+      - ``String q = "data.txt";``            -> string_literal
+      - ``Path j = Paths.get("a", "b");``     -> path_constructor
+
+    File scope (not per-method) is sufficient for this PoC and matches the Go
+    reference, whose resolver is likewise whole-tree.
+    """
+    assignments: dict[str, tuple[str, str]] = {}
+
+    # PASS 1: method/constructor formal parameters (lowest precedence).
+    for param in walk_named(root, "formal_parameter"):
+        name_node = None
+        for child in param.children:
+            if child.is_named and child.type == "identifier":
+                name_node = child  # last identifier is the param name
+        if name_node is not None:
+            assignments[node_text(name_node, src)] = ("", _PROVENANCE_FUNCTION_PARAM)
+
+    # PASS 2: local variable declarations (single declarator with an initializer).
+    for decl in walk_named(root, "local_variable_declaration"):
+        for declr in decl.children:
+            if not declr.is_named or declr.type != "variable_declarator":
+                continue
+            name_node = declr.child_by_field_name("name")
+            value_node = declr.child_by_field_name("value")
+            if name_node is None or value_node is None:
+                continue
+            resolved = _value_provenance(value_node, src)
+            if resolved is not None:
+                assignments[node_text(name_node, src)] = resolved
+
+    return assignments
+
+
+def _resolve_arg_target(
+    arg_node, src: bytes, assignments: dict[str, tuple[str, str]]
+) -> tuple[str, str]:
+    """Resolve a writer's path argument node to ``(resolved_target, provenance)``.
+
+    Returns ``(_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)`` when the target cannot be
+    resolved -- never a guessed/false target.
+
+    Resolution order (mirrors the Go ``_resolve_arg_target``):
+      1. bare string literal                 -> (literal, string_literal)
+      2. inline Path.of(...) / Paths.get(...) -> (joined, string_literal|path_constructor)
+      3. identifier -> assignment lookup      -> resolved value, or, when the
+         identifier is a method parameter, ("", function_parameter) sentinel.
+      4. Path.of(<identifier>) wrapper        -> unwrap to step 3 (so a parameter
+         wrapped in the idiomatic ``Path.of(param)`` keeps function_parameter
+         provenance rather than collapsing to unknown).
+    """
+    if arg_node is None:
+        return (_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)
+
+    # 1 + 2: inline literal or Path.of/Paths.get builder of literals.
+    inline = _value_provenance(arg_node, src)
+    if inline is not None:
+        path, prov = inline
+        if _is_plausible_path(path):
+            return (path, prov)
+
+    # 4. Path.of(<identifier>) / Paths.get(<identifier>): unwrap a single
+    #    identifier argument so a wrapped variable/parameter is still traced.
+    if arg_node.type == "method_invocation":
+        obj = arg_node.child_by_field_name("object")
+        name = arg_node.child_by_field_name("name")
+        args = arg_node.child_by_field_name("arguments")
+        if (
+            obj is not None and name is not None and args is not None
+            and node_text(obj, src) in _PATH_BUILDER_RECEIVERS
+            and node_text(name, src) in _PATH_BUILDER_METHODS
+        ):
+            inner = [c for c in args.children if c.is_named]
+            if len(inner) == 1 and inner[0].type == "identifier":
+                arg_node = inner[0]  # fall through to identifier handling below
+
+    # 3. Identifier -> assignment / parameter.
+    if arg_node.type == "identifier":
+        name = node_text(arg_node, src)
+        entry = assignments.get(name)
+        if entry is not None:
+            path, prov = entry
+            if prov == _PROVENANCE_FUNCTION_PARAM:
+                return (_UNKNOWN_TARGET, _PROVENANCE_FUNCTION_PARAM)
+            if path and _is_plausible_path(path):
+                return (path, prov)
+
+    return (_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +663,22 @@ class JavaAdapter(RegexAdapterBase):
         - ``new FileWriter(...)`` / ``new FileOutputStream(...)``
               → ``write_kind="fs_write"``, target_hint = first arg text
 
+        Target resolution (additive — mirrors the Go PoC / Python resolver).
+        For the path-argument writers (``Files.write`` / ``Files.writeString`` /
+        ``new FileWriter`` / ``new FileOutputStream``) the first argument is
+        resolved into ``resolved_target`` + ``provenance``:
+
+        - string-literal arg                 → literal, ``provenance="string_literal"``
+        - ``Path.of("x")`` / single literal  → literal, ``provenance="string_literal"``
+        - ``Path.of("a","b")`` / ``Paths.get`` → joined, ``provenance="path_constructor"``
+        - variable arg                       → traced to its local-variable
+          initializer in scope (string literal or Path.of/Paths.get of literals)
+        - method-parameter arg               → ``provenance="function_parameter"``
+          (the target is a param, no literal at the call site) — target stays
+          the ``__unknown_target__`` sentinel
+        - unresolvable, incl. receiver       → ``resolved_target="__unknown_target__"``,
+          ``*.write``/``*.append``/``*.save``   ``provenance="unknown"`` (no guessed target)
+
         Test files (path name ending with ``Test.java``) return ``[]``.
         All results carry ``confidence=1.0``.
         Results are sorted by ``(line, write_kind)``.
@@ -467,6 +690,9 @@ class JavaAdapter(RegexAdapterBase):
         src: bytes = content.encode("utf-8", errors="replace")
         root = parse_bytes(_LANGUAGE, src)
 
+        # Resolve local-variable / parameter bindings once for the whole file.
+        assignments = _collect_java_assignments(root, src)
+
         candidates: list[AuthorityWriteCandidate] = []
 
         def _hint(text: str) -> str:
@@ -474,12 +700,19 @@ class JavaAdapter(RegexAdapterBase):
             t = text.strip().strip('"\'').strip()
             return t[:30]
 
+        def _first_arg_node(args_node):
+            """Return the first named argument node of an argument_list, or None."""
+            if args_node is None:
+                return None
+            for c in args_node.children:
+                if c.is_named:
+                    return c
+            return None
+
         def _first_arg_text(args_node) -> str:
             """Return the text of the first argument from an argument_list node."""
-            if args_node is None:
-                return ""
-            named = [c for c in args_node.children if c.is_named]
-            return node_text(named[0], src) if named else ""
+            node = _first_arg_node(args_node)
+            return node_text(node, src) if node is not None else ""
 
         # --- method_invocation: object.method(args) ---
         for call in walk_named(root, "method_invocation"):
@@ -493,16 +726,19 @@ class JavaAdapter(RegexAdapterBase):
             method = node_text(name_node, src)
             line = node_line(call)
 
-            # Files.write / Files.writeString (java.nio)
+            # Files.write / Files.writeString (java.nio) — first arg is the path.
             if receiver == "Files" and method in ("write", "writeString"):
+                resolved, prov = _resolve_arg_target(_first_arg_node(args), src, assignments)
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="fs_write",
                     target_hint=_hint(_first_arg_text(args)),
                     line=line,
                     confidence=1.0,
+                    resolved_target=resolved,
+                    provenance=prov,
                 ))
 
-            # *.write / *.append (any other receiver — stream/writer)
+            # *.write / *.append (any other receiver — stream/writer, NOT a path).
             elif method in ("write", "append") and receiver != "Files":
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="fs_write",
@@ -511,7 +747,7 @@ class JavaAdapter(RegexAdapterBase):
                     confidence=1.0,
                 ))
 
-            # *.save / *.persist (JPA/Spring)
+            # *.save / *.persist (JPA/Spring — receiver is a repo, NOT a path).
             elif method in ("save", "persist"):
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="orm_save",
@@ -520,7 +756,7 @@ class JavaAdapter(RegexAdapterBase):
                     confidence=1.0,
                 ))
 
-        # --- object_creation_expression: new Type(args) ---
+        # --- object_creation_expression: new Type(args) — first arg is the path. ---
         _WRITER_TYPES = frozenset({"FileWriter", "FileOutputStream"})
         for creation in walk_named(root, "object_creation_expression"):
             type_node = creation.child_by_field_name("type")
@@ -530,11 +766,14 @@ class JavaAdapter(RegexAdapterBase):
             type_name = node_text(type_node, src)
             if type_name not in _WRITER_TYPES:
                 continue
+            resolved, prov = _resolve_arg_target(_first_arg_node(args), src, assignments)
             candidates.append(AuthorityWriteCandidate(
                 write_kind="fs_write",
                 target_hint=_hint(_first_arg_text(args)),
                 line=node_line(creation),
                 confidence=1.0,
+                resolved_target=resolved,
+                provenance=prov,
             ))
 
         candidates.sort(key=lambda c: (c.line, c.write_kind))
