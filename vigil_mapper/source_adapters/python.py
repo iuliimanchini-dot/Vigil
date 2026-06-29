@@ -55,14 +55,28 @@ class PythonAdapter(RegexAdapterBase):
     # ------------------------------------------------------------------
 
     def extract_imports(self, content: str, path: Path) -> list[ImportEdge]:
-        """Parse *content* with ``ast`` and return one ImportEdge per import.
+        """Parse *content* with ``ast`` and return one ImportEdge per import token.
 
-        Handles:
-            ``import X`` -- kind="absolute"
-            ``import X as Y`` -- kind="absolute" (alias ignored; module name kept)
-            ``from X import Y`` -- kind="absolute"
-            ``from .X import Y`` -- kind="relative" (leading dots preserved)
-            ``from ..X import Y`` -- kind="relative"
+        Reproduces the full import-target richness that the structural map builder
+        historically extracted for Python via ``parse_cache._extract_imports_out``
+        (the production AST path) plus the slow-path ``_extract_imports`` donor:
+
+            ``import X`` / ``import X.Y`` -- one edge per dotted alias name.
+            ``from X import a, b``        -- edge for ``X`` AND edges for the
+                                             sub-module candidates ``X.a`` / ``X.b``
+                                             (so ``from pkg import sub`` resolves to
+                                             ``pkg/sub.py``). ``*`` is skipped.
+            ``from .X import a``          -- relative; leading dots preserved on the
+                                             module (``.X``). When there is no module
+                                             (``from . import a``) the candidate is
+                                             ``.a`` (dots + name).
+            dynamic ``importlib.import_module("m")`` / ``__import__("m")`` -- edge for
+                                             the literal module string.
+
+        Emission ORDER and de-duplication match ``_extract_imports_out`` exactly:
+        a single ``ast.walk`` pass, each new ``to_module`` emitted once in first-seen
+        order.  Structural builder consumes ``e.to_module`` (dedup, order-preserving),
+        so this ordering is load-bearing for parity.
 
         Returns [] on ``SyntaxError`` without raising.
         """
@@ -76,56 +90,69 @@ class PythonAdapter(RegexAdapterBase):
             )
             return []
 
+        from_posix = path.as_posix()
         imports: list[ImportEdge] = []
+        seen: set[str] = set()
+
+        def _emit(module: str, kind: str, line: int) -> None:
+            if not module or module in seen:
+                return
+            seen.add(module)
+            imports.append(
+                ImportEdge(
+                    from_file=from_posix,
+                    to_module=module,
+                    kind=kind,
+                    line=line,
+                    confidence=1.0,
+                )
+            )
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    imports.append(
-                        ImportEdge(
-                            from_file=path.as_posix(),
-                            to_module=alias.name,
-                            kind="absolute",
-                            line=node.lineno,
-                            confidence=1.0,
-                        )
-                    )
+                    _emit(alias.name, "absolute", node.lineno)
 
             elif isinstance(node, ast.ImportFrom):
-                if node.module is None:
-                    # ``from . import X`` — no module name; emit one edge per name
-                    dots = "." * (node.level or 0)
+                level = node.level or 0
+                if level == 0 and node.module:
+                    _emit(node.module, "absolute", node.lineno)
                     for alias in node.names:
-                        imports.append(
-                            ImportEdge(
-                                from_file=path.as_posix(),
-                                to_module=f"{dots}{alias.name}",
-                                kind="relative",
-                                line=node.lineno,
-                                confidence=1.0,
-                            )
-                        )
-                else:
-                    dots = "." * (node.level or 0)
-                    kind = "relative" if node.level else "absolute"
-                    imports.append(
-                        ImportEdge(
-                            from_file=path.as_posix(),
-                            to_module=f"{dots}{node.module}",
-                            kind=kind,
-                            line=node.lineno,
-                            confidence=1.0,
-                        )
-                    )
+                        if alias.name != "*":
+                            _emit("%s.%s" % (node.module, alias.name), "absolute", node.lineno)
+                elif level > 0:
+                    dots = "." * level
+                    if node.module:
+                        _emit(dots + node.module, "relative", node.lineno)
+                    else:
+                        for alias in node.names:
+                            if alias.name != "*":
+                                _emit(dots + alias.name, "relative", node.lineno)
+
+            elif isinstance(node, ast.Call):
+                func = node.func
+                if (
+                    isinstance(func, ast.Attribute)
+                    and func.attr == "import_module"
+                ) or (isinstance(func, ast.Name) and func.id == "__import__"):
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(
+                        node.args[0].value, str
+                    ):
+                        _emit(node.args[0].value, "absolute", getattr(node, "lineno", 0))
 
         return imports
 
     def extract_symbols(self, content: str, path: Path) -> list[SymbolDef]:
-        """Parse *content* with ``ast`` and return top-level class/function defs.
+        """Parse *content* with ``ast`` and return class/function defs at ANY scope.
 
-        Only inspects ``tree.body`` (module-level statements) -- nested classes
-        and functions are not emitted in L1. Visibility follows Python convention:
-        names starting with ``_`` are ``"private"``, all others ``"public"``.
+        Walks the whole tree (``ast.walk``) so nested classes, methods, and inner
+        functions are all emitted -- matching the structural map builder's historic
+        ``_extract_symbols_defined`` / ``parse_cache`` behaviour (which collected
+        every ``ClassDef`` / ``FunctionDef`` / ``AsyncFunctionDef`` name).  Order is
+        ``ast.walk`` order, which is what the builder serialises.
+
+        Visibility follows Python convention: names starting with ``_`` are
+        ``"private"``, all others ``"public"``.
 
         Returns [] on ``SyntaxError`` without raising.
         """
@@ -141,31 +168,22 @@ class PythonAdapter(RegexAdapterBase):
 
         syms: list[SymbolDef] = []
 
-        for node in tree.body:
+        for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
-                syms.append(
-                    SymbolDef(
-                        name=node.name,
-                        kind="class",
-                        line=node.lineno,
-                        visibility=(
-                            "private" if node.name.startswith("_") else "public"
-                        ),
-                        confidence=1.0,
-                    )
-                )
+                kind = "class"
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                syms.append(
-                    SymbolDef(
-                        name=node.name,
-                        kind="function",
-                        line=node.lineno,
-                        visibility=(
-                            "private" if node.name.startswith("_") else "public"
-                        ),
-                        confidence=1.0,
-                    )
+                kind = "function"
+            else:
+                continue
+            syms.append(
+                SymbolDef(
+                    name=node.name,
+                    kind=kind,
+                    line=node.lineno,
+                    visibility=("private" if node.name.startswith("_") else "public"),
+                    confidence=1.0,
                 )
+            )
 
         return syms
 
