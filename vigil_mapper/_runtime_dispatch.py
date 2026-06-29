@@ -34,6 +34,8 @@ _KIND_MAP: dict[str, dict] = {
     "timer":            {"node_kind": "worker",     "side_effects": ("scheduled",),         "tags": ("js", "timer")},
     "event_listener":   {"node_kind": "init",       "side_effects": ("event_binding",),     "tags": ("js", "event")},
     "top_level_effect": {"node_kind": "init",       "side_effects": ("import_time",),       "tags": ("js", "top_level")},
+    # Swift runtime kinds
+    "entrypoint":       {"node_kind": "init",       "side_effects": ("import_time",),       "tags": ("swift", "entrypoint")},
 }
 
 

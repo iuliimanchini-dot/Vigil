@@ -13,6 +13,7 @@ Public API:
     TYPESCRIPT_PROFILE           -- TypeScript profile
     GO_PROFILE                   -- Go profile
     JAVA_PROFILE                 -- Java profile
+    SWIFT_PROFILE                -- Swift profile
     get_profile_for_extension    -- lookup by file extension (e.g. ".py")
     get_profile_for_lang         -- lookup by language_id (e.g. "python")
 """
@@ -174,6 +175,34 @@ JAVA_PROFILE = LanguageProfile(
     }),
 )
 
+SWIFT_PROFILE = LanguageProfile(
+    language_id="swift",
+    source_extensions=frozenset({".swift"}),
+    # XCTest convention: FooTests.swift / FooTest.swift, plus a /Tests/ dir.
+    test_file_patterns=("Tests.swift", "Test.swift", "/Tests/"),
+    generic_helper_stems=frozenset({
+        "Utils", "Helpers", "Common", "Shared", "Extensions",
+        "Util", "Helper", "Constants",
+    }),
+    shared_layer_families=frozenset({
+        "shared", "common", "utils", "helpers", "extensions", "core",
+    }),
+    flow_marker_patterns=(
+        r"func build",
+        r"func create",
+        r"func run",
+        r"func execute",
+        r"JSONEncoder\(",
+        r"JSONDecoder\(",
+    ),
+    comment_line_prefixes=("//", "/*"),
+    function_extraction_supported=False,
+    exclude_dir_hints=frozenset({
+        ".build", "Pods", "Carthage", "DerivedData",
+        "node_modules", ".swiftpm",
+    }),
+)
+
 # ---------------------------------------------------------------------------
 # Lookup indices
 # ---------------------------------------------------------------------------
@@ -186,6 +215,7 @@ _PROFILES_BY_EXTENSION: dict[str, LanguageProfile] = {
         TYPESCRIPT_PROFILE,
         GO_PROFILE,
         JAVA_PROFILE,
+        SWIFT_PROFILE,
     ]
     for ext in profile.source_extensions
 }
@@ -198,6 +228,7 @@ _PROFILES_BY_LANG: dict[str, LanguageProfile] = {
         TYPESCRIPT_PROFILE,
         GO_PROFILE,
         JAVA_PROFILE,
+        SWIFT_PROFILE,
     ]
 }
 

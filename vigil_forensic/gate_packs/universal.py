@@ -23,6 +23,7 @@ from vigil_forensic.gate_checks.runtime_behavior_checks import run_runtime_dupli
 from vigil_forensic.gate_checks.contract_shape_drift_checks import run_contract_shape_drift_checks
 from vigil_forensic.gate_checks.toctou_checks import run_toctou_check_then_act
 from vigil_forensic.gate_checks.atomic_write_checks import run_atomic_write_safety_checks
+from vigil_forensic.gate_checks.swift_safety_checks import run_swift_force_unwrap_checks, run_swift_iuo_checks
 from vigil_forensic.gate_checks.context_fallback_checks import run_context_fallback_save_checks
 from vigil_forensic.gate_checks.broad_except_hidden_sentinel_checks import run_broad_except_hidden_sentinel_checks
 from vigil_forensic.gate_checks.god_object_zones_checks import run_god_object_zones_checks
@@ -124,6 +125,9 @@ GATE_SPECS: tuple[tuple[str, GateCategory, Any], ...] = (
     ("runtime_duplicate_side_effect", GateCategory.RUNTIME_BEHAVIOR, run_runtime_duplicate_side_effect_checks),
     ("toctou_check_then_act", GateCategory.RUNTIME_BEHAVIOR, run_toctou_check_then_act),
     ("atomic_write_safety", GateCategory.DRIFT, run_atomic_write_safety_checks),
+    # Swift safety (AST-precise; runs only on .swift files)
+    ("swift.force_unwrap", GateCategory.RUNTIME_BEHAVIOR, run_swift_force_unwrap_checks),
+    ("swift.implicitly_unwrapped_optional", GateCategory.RUNTIME_BEHAVIOR, run_swift_iuo_checks),
     ("context_fallback_save", GateCategory.CONTRACT, run_context_fallback_save_checks),
     # drift
     ("contract_shape_drift", GateCategory.DRIFT, run_contract_shape_drift_checks),
