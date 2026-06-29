@@ -297,9 +297,17 @@ def _collect_auto_write_targets(
     # Non-Python adapter writers (TS/JS/Go/Java etc.)
     for writer_rel, candidates in sorted(adapter_candidates.items()):
         for candidate in candidates:
-            if not candidate.target_hint:
+            # Prefer the adapter-resolved target (e.g. Go's resolver) when it
+            # resolved a real path; otherwise fall back to the thin target_hint
+            # (TS/JS/Java/Swift, which don't resolve yet, keep current behaviour).
+            chosen = (
+                candidate.resolved_target
+                if (candidate.resolved_target and candidate.resolved_target != _UNKNOWN_TARGET)
+                else candidate.target_hint
+            )
+            if not chosen:
                 continue
-            base = _normalize_target_path(candidate.target_hint)
+            base = _normalize_target_path(chosen)
             target_to_writers.setdefault(base, []).append(writer_rel)
             # No WriteCall object available for adapters
             target_to_write_calls.setdefault(base, []).append((writer_rel, None))
@@ -418,7 +426,11 @@ def _build_no_seed_writer_domains(
 
         # Non-Python adapter candidates (Go/Java/JS/TS)
         for cand in adapter_candidates.get(writer_rel, []):
-            target = cand.target_hint or ""
+            # Use the adapter-resolved target+provenance when the adapter
+            # resolved a real path; otherwise the thin target_hint / unknown.
+            resolved = cand.resolved_target
+            use_resolved = bool(resolved) and resolved != _UNKNOWN_TARGET
+            target = (resolved if use_resolved else cand.target_hint) or ""
             if target:
                 targets.append(_normalize_target_path(target))
             writers_detected.append({
@@ -427,7 +439,7 @@ def _build_no_seed_writer_domains(
                 "target": _normalize_target_path(target) if target else "",
                 "operation": cand.write_kind,
                 "line": cand.line,
-                "provenance": _PROVENANCE_UNKNOWN,
+                "provenance": cand.provenance if use_resolved else _PROVENANCE_UNKNOWN,
                 "file_role": classify_file_role(writer_rel),
             })
 
