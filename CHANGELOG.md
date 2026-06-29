@@ -4,6 +4,25 @@ All notable changes to `vigil-codeintel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 uses [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] — 2026-06-29
+
+### Added
+- **Swift support (6th language)** — `SwiftAdapter` (tree-sitter-swift): structural,
+  data-contract (struct/class/protocol/enum/actor), runtime (`@main`, `Task`/`DispatchQueue`),
+  and authority (`write(to:)`, `FileManager`, `.save()`) maps. Forensic `SWIFT_PROFILE`
+  plus two AST-precise safety gates: `swift.force_unwrap` and
+  `swift.implicitly_unwrapped_optional`.
+- Oracle corpora `tests/oracle_unify/` and `tests/oracle_swift/` that exercise the
+  authority resolver / runtime merge and Swift extraction the main tree can't.
+
+### Changed
+- **Python now routes through the source adapter for ALL four maps** — true 6-language
+  parity. `authority` and `runtime` joined `structural` and `data_contract`: the write-site
+  resolver moved to `_authority_ast.py` and the runtime visitor is consumed via the adapter.
+  Verified byte-identical to the previous builder output on three targets (vigil_mapper,
+  vigil_forensic, oracle); Go/Java/TS/JS maps unchanged.
+- Docs reflect six supported languages (capability matrix, usage docs EN/RU/ZH).
+
 ## [0.1.1] — 2026-06-29
 
 ### Added
