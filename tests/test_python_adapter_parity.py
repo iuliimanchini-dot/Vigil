@@ -42,6 +42,25 @@ def test_python_no_false_contract_on_plain_class():
     assert _ad().extract_contracts("class Plain:\n    def m(self): pass\n", _P) == []
 
 
+def test_python_contract_shape_and_serializers():
+    # The adapter carries the full per-file richness the data_contract builder
+    # consumes: top-level annotated field shape + serializer-method dict keys.
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass\n"
+        "class Trade:\n"
+        "    price: float\n"
+        "    qty: int\n"
+        "    def to_dict(self):\n"
+        "        return {'price': self.price, 'qty': self.qty}\n"
+    )
+    cands = {c.name: c for c in _ad().extract_contracts(src, _P)}
+    assert "Trade" in cands
+    t = cands["Trade"]
+    assert t.shape == {"price": "float", "qty": "int"}
+    assert t.serializer_shapes == {"to_dict": ["price", "qty"]}
+
+
 def test_python_runtime_signals():
     src = (
         "import os\n"

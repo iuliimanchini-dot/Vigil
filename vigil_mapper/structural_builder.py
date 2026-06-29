@@ -6,13 +6,12 @@ Scans any target project directory and builds a dependency graph:
   - auto-tags: large_file, high_fan_in, high_fan_out, cycle_member, unparseable
   - symbols_defined (class / function names)
 
-Multi-language: Python files are parsed via AST (Pass 1); all other languages
-registered in source_adapters.ADAPTERS (TypeScript, JavaScript, Go, Java) are
-processed via regex-based adapters in Pass 1b (_collect_non_python_raw_data).
-Both passes contribute StructuralEntry records to the same result list.
-
-Remaining gap: contracts/authority/runtime maps (Maps 2-4) are Python-AST-only
-today; non-Python adapters return [] stubs for those passes.
+Multi-language: every registered language (Python, TypeScript, JavaScript, Go,
+Java) flows through the SAME adapter path -- ``adapter.extract_imports`` /
+``adapter.extract_symbols`` via ``_collect_adapter_raw_data`` (Pass 1). Python is
+no longer special-cased; its parseability/line-count is served from parse_cache
+when available, while imports/symbols come from ``PythonAdapter`` like any other
+language.
 
 Generic design: operates on any project_dir, no Vigil-specific assumptions.
 Self-diagnosis: pass project_dir=Path(".") to run against Vigil itself.
@@ -30,11 +29,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Sequence
 
-from .map_common import STRUCTURAL_THRESHOLDS, iter_py_files, iter_source_files
+from .map_common import STRUCTURAL_THRESHOLDS, iter_source_files
 from .map_errors import MapBuilderError
 from .map_models import StructuralEntry
 from .source_adapters import get_adapter_for_file
-from ._extract_imports_impl import _extract_imports  # noqa: PLC2701
 
 __all__ = ["build_structural_map"]
 
@@ -65,91 +63,122 @@ def _is_parseable(source: str) -> bool:
         return False
 
 
-def _extract_symbols_defined(source: str) -> list[str]:
-    """Return class and function names defined in source (all scopes).
-
-    Returns empty list on SyntaxError (caller already tagged unparseable).
-    """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return []
-    names: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            names.append(node.name)
-    return names
-
-
-def _collect_from_import_candidates(source: str) -> list[str]:
-    """Collect additional dotted candidates from 'from X import Y' statements.
-
-    _extract_imports adds only the module X for 'from X import Y'.
-    Here we also produce 'X.Y' as a candidate, so that sub-module imports
-    like 'from pkg import submod' resolve to 'pkg/submod.py'.
-
-    Returns list of dotted strings (may contain duplicates -- dedup is done by caller).
-    Silently returns empty list on SyntaxError.
-    """
-    candidates: list[str] = []
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return candidates
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            for alias in node.names:
-                if alias.name != "*":
-                    candidates.append(f"{node.module}.{alias.name}")
-    return candidates
-
-
 _TS_EXTS = (".ts", ".tsx", ".js", ".jsx")
 
 
-def _collect_non_python_raw_data(
+def _collect_adapter_raw_data(
     project_dir: Path,
     include_roots: "Sequence[str] | None",
     max_file_bytes: float = float("inf"),
     oversized_files: "list[dict] | None" = None,
     cancel_event: "Any | None" = None,
+    parse_cache: "Any | None" = None,
 ) -> "dict[str, dict]":
+    """Collect structural raw data for EVERY registered language via its adapter.
+
+    Single adapter-driven path (no per-language special-casing): each source file
+    is handed to ``adapter.extract_imports`` / ``adapter.extract_symbols`` and the
+    resulting ``imports_out`` (dedup, order-preserving on ``to_module``) and
+    ``symbols_defined`` (one per ``SymbolDef``) are recorded.
+
+    Python parity notes (vs the historical dedicated AST path):
+      - ``unparseable`` is determined by a real ``ast.parse`` for Python (an
+        empty extraction from a SyntaxError must still be tagged unparseable);
+        for non-Python the adapter never raises on malformed input, so a parse
+        failure is signalled only by an adapter exception (legacy behaviour).
+      - ``size_lines`` uses the identical line-count formula for all languages.
+      - When ``parse_cache`` is supplied (production path), the Python
+        parseability/line-count is taken from the cache to avoid a second parse;
+        imports/symbols still come from the adapter so the cache and adapter
+        never disagree.
+    """
     result: dict[str, dict] = {}
     for src_file in iter_source_files(project_dir, include_roots=include_roots):
         if cancel_event is not None and cancel_event.is_set():
-            _log.info("_collect_non_python_raw_data: cancelled, stopping early")
+            _log.info("_collect_adapter_raw_data: cancelled, stopping early")
             break
         adapter = get_adapter_for_file(src_file)
-        if adapter is None or adapter.language == "python" or not adapter.supports_structural:
+        if adapter is None or not adapter.supports_structural:
             continue
+        is_python = adapter.language == "python"
         rel = _rel_posix(src_file, project_dir)
-        # File-size guard — skip oversized non-Python files
-        try:
-            file_bytes = src_file.stat().st_size
-        except OSError:
-            file_bytes = 0
-        if file_bytes > max_file_bytes:
-            size_mb = file_bytes / (1024 * 1024)
-            _log.warning(
-                "_collect_non_python_raw_data: skipping oversized file %s (%.1f MiB)",
-                src_file, size_mb,
-            )
-            if oversized_files is not None:
-                oversized_files.append({"path": str(src_file), "size_mb": round(size_mb, 3)})
-            continue
-        try:
-            content = src_file.read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:
-            _log.warning("_collect_non_python_raw_data: cannot read %s: %s", src_file, exc)
-            continue
-        size_lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
+
+        # File-size guard. Non-Python: skip oversized files entirely (legacy
+        # _collect_non_python_raw_data behaviour). Python: NEVER skip here -- the
+        # historical AST path always recorded an entry for oversized .py files
+        # (path-only, empty imports/symbols, unparseable=True) via parse_cache's
+        # empty ParsedFile; the slow path (no cache) had no size guard at all.
+        if not is_python:
+            try:
+                file_bytes = src_file.stat().st_size
+            except OSError:
+                file_bytes = 0
+            if file_bytes > max_file_bytes:
+                size_mb = file_bytes / (1024 * 1024)
+                _log.warning(
+                    "_collect_adapter_raw_data: skipping oversized file %s (%.1f MiB)",
+                    src_file, size_mb,
+                )
+                if oversized_files is not None:
+                    oversized_files.append({"path": str(src_file), "size_mb": round(size_mb, 3)})
+                continue
+
+        # Python parseability/size via parse_cache when available (production fast
+        # path); the cache skips a redundant ast.parse + read for unchanged files
+        # AND records oversized .py files (returning an empty ParsedFile so the
+        # file still surfaces as a path-only structural entry).
+        cached_source: str | None = None
+        cached_parseable: bool | None = None
+        cached_size_lines: int | None = None
+        if is_python and parse_cache is not None:
+            parsed = parse_cache.get_or_parse(src_file, project_dir)
+            cached_parseable = parsed.is_parseable
+            cached_size_lines = parsed.size_lines
+            cached_source = parse_cache.get_cached_source(src_file)
+            # Oversized .py (cache skipped read): no source cached. Emit a
+            # path-only entry with empty imports/symbols -- matching legacy.
+            if cached_source is None and cached_size_lines == 0 and not cached_parseable:
+                result[rel] = {
+                    "imports_out": [],
+                    "symbols_defined": [],
+                    "size_lines": 0,
+                    "unparseable": True,
+                    "language": adapter.language,
+                }
+                continue
+
+        if cached_source is not None:
+            content = cached_source
+        else:
+            try:
+                content = src_file.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                _log.warning("_collect_adapter_raw_data: cannot read %s: %s", src_file, exc)
+                continue
+
+        if cached_size_lines is not None:
+            size_lines = cached_size_lines
+        else:
+            size_lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
+
         try:
             import_edges = adapter.extract_imports(content, src_file)
             symbol_defs = adapter.extract_symbols(content, src_file)
-            unparseable = False
+            adapter_failed = False
         except Exception as exc:
-            _log.warning("_collect_non_python_raw_data: adapter error on %s: %s", rel, exc)
-            import_edges, symbol_defs, unparseable = [], [], True
+            _log.warning("_collect_adapter_raw_data: adapter error on %s: %s", rel, exc)
+            import_edges, symbol_defs, adapter_failed = [], [], True
+
+        if is_python:
+            # A SyntaxError yields empty adapter output without raising; the file
+            # must still be tagged unparseable to match the legacy AST path.
+            if cached_parseable is not None:
+                unparseable = not cached_parseable
+            else:
+                unparseable = not _is_parseable(content)
+        else:
+            unparseable = adapter_failed
+
         result[rel] = {
             "imports_out": list(dict.fromkeys(e.to_module for e in import_edges if e.to_module)),
             "symbols_defined": [s.name for s in symbol_defs],
@@ -157,7 +186,7 @@ def _collect_non_python_raw_data(
             "unparseable": unparseable,
             "language": adapter.language,
         }
-    _log.debug("_collect_non_python_raw_data: %d non-Python files", len(result))
+    _log.debug("_collect_adapter_raw_data: %d files", len(result))
     return result
 
 
@@ -318,107 +347,25 @@ def build_structural_map(
     t_start = time.monotonic()
 
     # ------------------------------------------------------------------
-    # Pass 1: parse each file → collect raw data
+    # Pass 1: parse each file → collect raw data (single adapter-driven path
+    # for ALL languages, including Python). Each file's imports/symbols come
+    # from adapter.extract_imports / adapter.extract_symbols; Python
+    # parseability/line-count is served from parse_cache when available.
     # ------------------------------------------------------------------
     # raw_data[rel_posix] = {imports_out, symbols_defined, size_lines, unparseable}
-    raw_data: dict[str, dict] = {}
-
-    try:
-        py_files = list(iter_py_files(project_dir, include_roots))
-    except Exception as exc:
-        raise MapBuilderError(
-            "build_structural_map: iter_py_files failed: %s" % exc
-        ) from exc
 
     # Derive max_file_bytes from parse_cache if available (keeps the limit consistent)
     _max_file_bytes: float = getattr(parse_cache, "_max_file_bytes", float("inf"))
     _oversized: list[dict] = getattr(parse_cache, "oversized_files", [])
 
-    for abs_path in py_files:
-        if cancel_event is not None and cancel_event.is_set():
-            _log.info("build_structural_map: cancelled, stopping py_files loop early")
-            break
-        rel = _rel_posix(abs_path, project_dir)
-
-        # --- Fast path: use parse_cache if available ---
-        if parse_cache is not None:
-            parsed = parse_cache.get_or_parse(abs_path, project_dir)
-            raw_data[rel] = {
-                "imports_out": parsed.imports_out,
-                "symbols_defined": parsed.symbols_defined,
-                "size_lines": parsed.size_lines,
-                "unparseable": not parsed.is_parseable,
-                "language": "python",
-            }
-            continue
-
-        # --- Slow path: direct read + parse (backward-compat, parse_cache=None) ---
-        unparseable = False
-        imports_out: list[str] = []
-        symbols_defined: list[str] = []
-        size_lines = 0
-
-        try:
-            source = abs_path.read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:
-            raise MapBuilderError(
-                "build_structural_map: cannot read %s: %s" % (abs_path, exc)
-            ) from exc
-
-        size_lines = source.count("\n") + (1 if source and not source.endswith("\n") else 0)
-
-        # Check parseability first (ast.parse directly, before _extract_imports
-        # which silently swallows SyntaxError and returns an empty ModuleNode)
-        if not _is_parseable(source):
-            unparseable = True
-        else:
-            # AST donor: _extract_imports returns ModuleNode
-            try:
-                module_node = _extract_imports(source, rel)
-            except Exception as exc:
-                raise MapBuilderError(
-                    "build_structural_map: unexpected error parsing %s: %s" % (rel, exc)
-                ) from exc
-
-            # Combine top-level + lazy + dynamic imports — deduplicated
-            seen: set[str] = set()
-            for imp in (
-                module_node.imports
-                + module_node.lazy_imports
-                + module_node.dynamic_imports
-            ):
-                if imp and imp not in seen:
-                    seen.add(imp)
-                    imports_out.append(imp)
-
-            # Also add "module.name" candidates from "from module import name"
-            # so that sub-module imports resolve correctly (e.g. from pkg import sub
-            # → candidate "pkg.sub" → resolves to "pkg/sub.py")
-            for candidate in _collect_from_import_candidates(source):
-                if candidate and candidate not in seen:
-                    seen.add(candidate)
-                    imports_out.append(candidate)
-
-            # symbols_defined: class/function names
-            symbols_defined = _extract_symbols_defined(source)
-
-        raw_data[rel] = {
-            "imports_out": imports_out,
-            "symbols_defined": symbols_defined,
-            "size_lines": size_lines,
-            "unparseable": unparseable,
-            "language": "python",
-        }
-
-    # Pass 1b: non-Python structural extraction via registered adapters
-    non_py_raw = _collect_non_python_raw_data(
+    raw_data: dict[str, dict] = _collect_adapter_raw_data(
         project_dir,
         include_roots,
         max_file_bytes=_max_file_bytes,
         oversized_files=_oversized,
         cancel_event=cancel_event,
+        parse_cache=parse_cache,
     )
-    raw_data.update(non_py_raw)
 
     _log.debug("build_structural_map: pass 1 done, %d files", len(raw_data))
 
