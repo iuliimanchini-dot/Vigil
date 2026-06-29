@@ -54,6 +54,14 @@ _log = logging.getLogger(__name__)
 
 _LANGUAGE = "go"
 
+# Target-resolution constants (mirror _authority_ast.py provenance levels so the
+# Go adapter speaks the same provenance vocabulary as the Python resolver).
+_UNKNOWN_TARGET = "__unknown_target__"
+_PROVENANCE_PATH_CONSTRUCTOR = "path_constructor"  # filepath.Join(...), path.Join(...)
+_PROVENANCE_STRING_LITERAL = "string_literal"      # "literal_path"
+_PROVENANCE_FUNCTION_PARAM = "function_parameter"  # func f(target string)
+_PROVENANCE_UNKNOWN = "unknown"
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -107,6 +115,210 @@ def _extract_import_spec(
         line=line,
         confidence=1.0,
     )
+
+
+# ---------------------------------------------------------------------------
+# Target resolution (Go write-site analysis -- mirrors _authority_ast.py)
+# ---------------------------------------------------------------------------
+
+def _string_literal_value(node, src: bytes) -> str | None:
+    """Return the bare value of a Go string-literal node, else None.
+
+    Handles ``interpreted_string_literal`` (double-quoted) and
+    ``raw_string_literal`` (back-quoted). The bare value lives in the
+    ``*_content`` child; if absent (empty string ``""``), return "".
+    """
+    if node is None:
+        return None
+    if node.type == "interpreted_string_literal":
+        for child in node.children:
+            if child.type == "interpreted_string_literal_content":
+                return node_text(child, src)
+        return ""  # empty interpreted literal: ""
+    if node.type == "raw_string_literal":
+        for child in node.children:
+            if child.type == "raw_string_literal_content":
+                return node_text(child, src)
+        return ""
+    return None
+
+
+def _is_plausible_path(s: str) -> bool:
+    """True iff *s* looks like a file path (mirror of the Python resolver guard).
+
+    Rejects empty / oversized / multi-line strings. Bare well-known filenames
+    are valid targets; otherwise the string must contain a path-like character
+    (``/``, ``\\`` or ``.``).
+    """
+    if not s or len(s) > 512:
+        return False
+    if "\n" in s or "\r" in s:
+        return False
+    if Path(s).name in {"Makefile", "Dockerfile", "Procfile", "LICENSE", "README"}:
+        return True
+    if "/" not in s and "\\" not in s and "." not in s:
+        return False
+    return True
+
+
+def _resolve_filepath_join(call_node, src: bytes) -> str | None:
+    """Resolve ``filepath.Join("a", "b", ...)`` / ``path.Join(...)`` to ``"a/b/..."``.
+
+    Best-effort: joins consecutive STRING-LITERAL arguments with ``/`` (the Go
+    path separator semantics). If ANY argument is a non-literal (variable,
+    call, etc.) the join is not fully determinable -> return None (no guess).
+    Returns None when the call is not a ``*.Join`` selector call.
+    """
+    fn = call_node.child_by_field_name("function")
+    if fn is None or fn.type != "selector_expression":
+        return None
+    operand = fn.child_by_field_name("operand")
+    field = fn.child_by_field_name("field")
+    if operand is None or field is None:
+        return None
+    if node_text(field, src) != "Join" or node_text(operand, src) not in ("filepath", "path"):
+        return None
+
+    args = call_node.child_by_field_name("arguments")
+    if args is None:
+        return None
+    parts: list[str] = []
+    for arg in args.children:
+        if not arg.is_named:
+            continue
+        lit = _string_literal_value(arg, src)
+        if lit is None:
+            return None  # non-literal segment -> cannot fully resolve
+        parts.append(lit)
+    if not parts:
+        return None
+    return "/".join(parts)
+
+
+def _collect_go_assignments(
+    root, src: bytes
+) -> dict[str, tuple[str, str]]:
+    """Return ``name -> (resolved_path, provenance)`` for the whole file.
+
+    Two passes, mirroring ``_authority_ast._collect_assignments``:
+      PASS 1 (lower precedence): function PARAMETERS -> ("", function_parameter).
+      PASS 2 (higher precedence): assignments overwrite params for the same name.
+
+    Assignment forms handled (value must be a single expression):
+      - ``p := "literal"``           (short_var_declaration)  -> string_literal
+      - ``var q = "literal"``        (var_declaration)        -> string_literal
+      - ``p := filepath.Join(...)``  (short_var_declaration)  -> path_constructor
+      - ``var q = filepath.Join(...)``                        -> path_constructor
+
+    File scope (not per-function) is sufficient for this PoC: Go disallows
+    duplicate identifiers across overlapping scopes in the oracle cases, and the
+    Python reference resolver is likewise whole-tree. Multi-name declarations
+    (``a, b := f()``) and re-assignment are out of scope -> left unresolved.
+    """
+    assignments: dict[str, tuple[str, str]] = {}
+
+    def _value_provenance(value_node) -> tuple[str, str] | None:
+        """Map a single RHS expression node to (path, provenance), or None."""
+        lit = _string_literal_value(value_node, src)
+        if lit is not None and lit != "":
+            return (lit, _PROVENANCE_STRING_LITERAL)
+        if value_node.type == "call_expression":
+            joined = _resolve_filepath_join(value_node, src)
+            if joined is not None:
+                return (joined, _PROVENANCE_PATH_CONSTRUCTOR)
+        return None
+
+    # PASS 1: function parameters (lowest precedence).
+    for param in walk_named(root, "parameter_declaration"):
+        for child in param.children:
+            if child.is_named and child.type == "identifier":
+                assignments[node_text(child, src)] = ("", _PROVENANCE_FUNCTION_PARAM)
+
+    # PASS 2: assignments. Single-name LHS only (skip multi-assign / blanks).
+    def _record(name_node, value_node) -> None:
+        if name_node is None or value_node is None:
+            return
+        resolved = _value_provenance(value_node)
+        if resolved is not None:
+            assignments[node_text(name_node, src)] = resolved
+
+    # short_var_declaration: left expression_list (names), right expression_list (values).
+    for decl in walk_named(root, "short_var_declaration"):
+        expr_lists = [c for c in decl.children if c.is_named and c.type == "expression_list"]
+        if len(expr_lists) != 2:
+            continue
+        left = [c for c in expr_lists[0].children if c.is_named]
+        right = [c for c in expr_lists[1].children if c.is_named]
+        if len(left) != 1 or len(right) != 1 or left[0].type != "identifier":
+            continue  # multi-name / unbalanced -> out of scope
+        _record(left[0], right[0])
+
+    # var_declaration: var_spec (single) or var_spec_list (grouped).
+    def _handle_var_spec(spec) -> None:
+        ids = [c for c in spec.children if c.is_named and c.type == "identifier"]
+        val_lists = [c for c in spec.children if c.is_named and c.type == "expression_list"]
+        if len(ids) != 1 or not val_lists:
+            return  # multi-name or no initializer -> out of scope
+        values = [c for c in val_lists[0].children if c.is_named]
+        if len(values) != 1:
+            return
+        _record(ids[0], values[0])
+
+    for var_decl in walk_named(root, "var_declaration"):
+        for child in var_decl.children:
+            if not child.is_named:
+                continue
+            if child.type == "var_spec":
+                _handle_var_spec(child)
+            elif child.type == "var_spec_list":
+                for spec in iter_named_children(child, "var_spec"):
+                    _handle_var_spec(spec)
+
+    return assignments
+
+
+def _resolve_arg_target(
+    arg_node, src: bytes, assignments: dict[str, tuple[str, str]]
+) -> tuple[str, str]:
+    """Resolve a call's first-argument node to ``(resolved_target, provenance)``.
+
+    Returns ``(_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)`` when the target cannot be
+    resolved -- never a guessed/false target.
+
+    Resolution order (mirrors ``_authority_ast._resolve_func_arg_target``):
+      1. string literal arg              -> (literal, string_literal)
+      2. filepath.Join(...) inline arg   -> (joined, path_constructor)
+      3. identifier -> assignment lookup -> resolved (string_literal/path_constructor)
+         or, if the identifier is a function parameter, ("", function_parameter)
+    """
+    if arg_node is None:
+        return (_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)
+
+    # 1. Inline string literal.
+    lit = _string_literal_value(arg_node, src)
+    if lit is not None and lit != "" and _is_plausible_path(lit):
+        return (lit, _PROVENANCE_STRING_LITERAL)
+
+    # 2. Inline filepath.Join(...).
+    if arg_node.type == "call_expression":
+        joined = _resolve_filepath_join(arg_node, src)
+        if joined is not None and _is_plausible_path(joined):
+            return (joined, _PROVENANCE_PATH_CONSTRUCTOR)
+
+    # 3. Identifier -> assignment / parameter.
+    if arg_node.type == "identifier":
+        name = node_text(arg_node, src)
+        entry = assignments.get(name)
+        if entry is not None:
+            path, prov = entry
+            if prov == _PROVENANCE_FUNCTION_PARAM:
+                # Target is a parameter: note provenance, but no literal path
+                # is known at this site -> keep the unknown sentinel target.
+                return (_UNKNOWN_TARGET, _PROVENANCE_FUNCTION_PARAM)
+            if path and _is_plausible_path(path):
+                return (path, prov)
+
+    return (_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +683,21 @@ class GoAdapter(RegexAdapterBase):
         - ``recv.Exec(...)``  (any receiver, db exec pattern)
               → ``write_kind="db_write"``, target_hint = first arg text (best-effort)
 
+        Target resolution (additive — mirrors the Python ``_authority_ast``
+        resolver). For the path-argument writers (``WriteFile`` / ``Create`` /
+        ``OpenFile`` / ``Exec``) the first argument is resolved into
+        ``resolved_target`` + ``provenance``:
+
+        - string-literal arg            → literal, ``provenance="string_literal"``
+        - variable arg                  → traced to its ``:=`` / ``var`` assignment
+          in scope (string literal or ``filepath.Join`` of literals)
+        - ``filepath.Join(...)`` arg    → joined path, ``provenance="path_constructor"``
+        - function-parameter arg        → ``provenance="function_parameter"`` (the
+          target is a param, no literal at the call site) — target stays the
+          ``__unknown_target__`` sentinel
+        - unresolvable (incl. receiver  → ``resolved_target="__unknown_target__"``,
+          ``Write``/``WriteString``)      ``provenance="unknown"`` (no guessed target)
+
         Test files (path ending with ``_test.go``) return ``[]``.
         All results carry ``confidence=1.0``.
         Results are sorted by ``(line, write_kind)``.
@@ -482,6 +709,9 @@ class GoAdapter(RegexAdapterBase):
         src: bytes = content.encode("utf-8", errors="replace")
         root = parse_bytes(_LANGUAGE, src)
 
+        # Resolve assignments once for the whole file (name -> (path, provenance)).
+        assignments = _collect_go_assignments(root, src)
+
         candidates: list[AuthorityWriteCandidate] = []
 
         def _hint(text: str) -> str:
@@ -489,15 +719,20 @@ class GoAdapter(RegexAdapterBase):
             t = text.strip().strip('"\'`').strip()
             return t[:30]
 
-        def _first_arg_text(call_node) -> str:
-            """Return the text of the first argument of a call_expression, or ''."""
+        def _first_arg_node(call_node):
+            """Return the first named argument node of a call_expression, or None."""
             args = call_node.child_by_field_name("arguments")
             if args is None:
-                return ""
-            named = [c for c in args.children if c.is_named]
-            if named:
-                return node_text(named[0], src)
-            return ""
+                return None
+            for c in args.children:
+                if c.is_named:
+                    return c
+            return None
+
+        def _first_arg_text(call_node) -> str:
+            """Return the text of the first argument of a call_expression, or ''."""
+            node = _first_arg_node(call_node)
+            return node_text(node, src) if node is not None else ""
 
         for call in walk_named(root, "call_expression"):
             fn = call.child_by_field_name("function")
@@ -515,23 +750,31 @@ class GoAdapter(RegexAdapterBase):
 
             # os.WriteFile / ioutil.WriteFile
             if method == "WriteFile" and pkg in ("os", "ioutil"):
+                resolved, prov = _resolve_arg_target(_first_arg_node(call), src, assignments)
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="fs_write",
                     target_hint=_hint(_first_arg_text(call)),
                     line=line,
                     confidence=1.0,
+                    resolved_target=resolved,
+                    provenance=prov,
                 ))
 
             # os.Create / os.OpenFile
             elif method in ("Create", "OpenFile") and pkg == "os":
+                resolved, prov = _resolve_arg_target(_first_arg_node(call), src, assignments)
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="fs_write",
                     target_hint=_hint(_first_arg_text(call)),
                     line=line,
                     confidence=1.0,
+                    resolved_target=resolved,
+                    provenance=prov,
                 ))
 
             # *.Write / *.WriteString  (any receiver — IO writer pattern)
+            # The receiver is an IO writer, NOT a path target -> no resolution
+            # (resolved_target/provenance keep the unknown defaults).
             elif method in ("Write", "WriteString"):
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="fs_write",
@@ -542,11 +785,14 @@ class GoAdapter(RegexAdapterBase):
 
             # *.Exec  (any receiver — DB exec pattern)
             elif method == "Exec":
+                resolved, prov = _resolve_arg_target(_first_arg_node(call), src, assignments)
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="db_write",
                     target_hint=_hint(_first_arg_text(call)),
                     line=line,
                     confidence=1.0,
+                    resolved_target=resolved,
+                    provenance=prov,
                 ))
 
         candidates.sort(key=lambda c: (c.line, c.write_kind))
