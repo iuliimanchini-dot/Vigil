@@ -35,9 +35,9 @@ from .map_common import iter_py_files
 from .map_errors import MapIntegrityError
 from .map_models import RuntimeNode
 from .map_storage import seeds_dir
-from ._runtime_ast import _RuntimeVisitor
+from .source_adapters import get_adapter_for_file
 
-__all__ = ["build_runtime_map_static", "build_runtime_map_full"]
+__all__ = ["build_runtime_map_static", "build_runtime_map_full", "build_python_runtime_nodes"]
 
 _log = logging.getLogger(__name__)
 
@@ -146,6 +146,153 @@ def _load_seed(project_dir: Path) -> list[RuntimeNode]:
 
 
 # ---------------------------------------------------------------------------
+# Python node-build path (unified source-adapter route)
+# ---------------------------------------------------------------------------
+
+def build_python_runtime_nodes(
+    project_dir: Path,
+    include_roots: Sequence[str] | None = None,
+    seed_node_names: "frozenset[str]" = frozenset(),
+    parse_cache: "Any | None" = None,
+    freshness: str | None = None,
+) -> list[RuntimeNode]:
+    """Build the inferred Python runtime nodes via the PythonAdapter path.
+
+    Routes Python runtime extraction through ``PythonAdapter.extract_runtime_results``
+    (the unified source-adapter path) and applies the SAME byte-identical
+    cross-result merge + seed-conflict skip + global sort the runtime builder
+    historically applied inline.  Returns inferred RuntimeNode objects (seed
+    names skipped), globally sorted by node name -- identical to the
+    dedicated-builder output.
+
+    This is the "Python-specific node-build path" (option b) invoked from
+    ``_runtime_dispatch.collect_adapter_runtime_nodes`` after the
+    ``language != "python"`` guard was removed; Go/Java/TS keep their separate
+    ``_signal_to_node`` conversion.
+    """
+    project_dir = project_dir.resolve()
+    if freshness is None:
+        freshness = _freshness_now()
+
+    try:
+        py_files = list(iter_py_files(project_dir, include_roots))
+    except Exception as exc:
+        from .map_errors import MapBuilderError  # noqa: PLC0415
+        raise MapBuilderError(
+            "build_python_runtime_nodes: iter_py_files failed: %s" % exc
+        ) from exc
+
+    _log.debug("build_python_runtime_nodes: scanning %d files", len(py_files))
+
+    # auto_raw: node_name → merged accumulator dict
+    auto_raw: dict[str, dict] = {}
+
+    for abs_path in py_files:
+        rel = _rel_posix(abs_path, project_dir)
+
+        # Use parse_cache if available to avoid re-reading + re-parsing.
+        # Cache gives us is_parseable; the ast.parse below is the SyntaxError
+        # gate that decides whether the file is handed to the adapter (it keeps
+        # the historical "skip unparseable" file-selection byte-identical).
+        if parse_cache is not None:
+            cached = parse_cache.get_or_parse(abs_path, project_dir)
+            if not cached.is_parseable:
+                _log.debug("build_python_runtime_nodes: skipping unparseable (cache): %s", rel)
+                continue
+            # Reuse cached source if available (avoid re-reading disk)
+            source = parse_cache.get_cached_source(abs_path)
+            if source is None:
+                # Fallback: cache miss on source (should be rare)
+                try:
+                    source = abs_path.read_text(encoding="utf-8", errors="replace")
+                except OSError as exc:
+                    from .map_errors import MapBuilderError  # noqa: PLC0415
+                    raise MapBuilderError(
+                        "build_python_runtime_nodes: cannot read %s: %s" % (abs_path, exc)
+                    ) from exc
+            try:
+                ast.parse(source, filename=rel)
+            except SyntaxError:
+                _log.debug("build_python_runtime_nodes: skipping unparseable file: %s", rel)
+                continue
+        else:
+            # Backward-compat: no cache
+            try:
+                source = abs_path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                from .map_errors import MapBuilderError  # noqa: PLC0415
+                raise MapBuilderError(
+                    "build_python_runtime_nodes: cannot read %s: %s" % (abs_path, exc)
+                ) from exc
+
+            try:
+                ast.parse(source, filename=rel)
+            except SyntaxError:
+                _log.debug("build_python_runtime_nodes: skipping unparseable file: %s", rel)
+                continue
+
+        # Route Python runtime extraction through the source adapter (unified
+        # path). PythonAdapter.extract_runtime_results runs the SAME
+        # _RuntimeVisitor and returns its raw per-file results; the cross-result
+        # merge + seed-conflict resolution below are unchanged.
+        py_adapter = get_adapter_for_file(abs_path)
+        if py_adapter is None or getattr(py_adapter, "language", "") != "python":
+            continue
+        visitor_results = py_adapter.extract_runtime_results(source, rel)
+
+        for raw in visitor_results:
+            name = raw["node"]
+            if name in auto_raw:
+                existing = auto_raw[name]
+                existing["tags"] = list(set(existing["tags"]) | set(raw["tags"]))
+                existing["env_vars"] = list(set(existing["env_vars"]) | set(raw["env_vars"]))
+                existing["side_effects"] = list(
+                    set(existing["side_effects"]) | set(raw["side_effects"])
+                )
+                # Preserve entry-function call targets (order-stable union).
+                for c in raw.get("calls", ()):
+                    if c not in existing["calls"]:
+                        existing["calls"].append(c)
+            else:
+                auto_raw[name] = {
+                    "node": name,
+                    "kind": raw["kind"],
+                    "tags": list(raw["tags"]),
+                    "env_vars": list(raw["env_vars"]),
+                    "side_effects": list(raw["side_effects"]),
+                    "calls": list(raw.get("calls", ())),
+                    "evidence": raw["evidence"],
+                    "defined_in": name.split(":")[0] if ":" in name else name,
+                }
+
+    _log.debug("build_python_runtime_nodes: auto-discovered %d raw nodes", len(auto_raw))
+
+    # Build inferred RuntimeNode objects, skipping seed conflicts (global sort).
+    auto_nodes: list[RuntimeNode] = []
+    for name, raw in sorted(auto_raw.items()):
+        if name in seed_node_names:
+            _log.debug("build_python_runtime_nodes: seed canonical wins for node %r", name)
+            continue
+        auto_nodes.append(RuntimeNode(
+            node=name,
+            defined_in=raw["defined_in"],
+            kind=raw["kind"],
+            calls=tuple(raw.get("calls", ())),
+            side_effects=tuple(sorted(set(raw["side_effects"]))),
+            depends_on_env=tuple(sorted(set(raw["env_vars"]))),
+            order_constraints=(),
+            hidden_runtime_dependencies=(),
+            tags=tuple(sorted(set(raw["tags"]))),
+            source="static_scan",
+            evidence=raw["evidence"],
+            confidence=0.75,
+            freshness=freshness,
+            status="inferred",
+        ))
+    return auto_nodes
+
+
+# ---------------------------------------------------------------------------
 # Main builder
 # ---------------------------------------------------------------------------
 
@@ -186,127 +333,26 @@ def build_runtime_map_static(
     seed_nodes = _load_seed(project_dir)
     seed_index: dict[str, RuntimeNode] = {n.node: n for n in seed_nodes}
 
-    # 2. Auto-discover via AST
-    try:
-        py_files = list(iter_py_files(project_dir, include_roots))
-    except Exception as exc:
-        from .map_errors import MapBuilderError
-        raise MapBuilderError(
-            "build_runtime_map_static: iter_py_files failed: %s" % exc
-        ) from exc
-
-    _log.debug("build_runtime_map_static: scanning %d files", len(py_files))
-
-    # auto_raw: node_name → merged accumulator dict
-    auto_raw: dict[str, dict] = {}
-    freshness = _freshness_now()
-
-    for abs_path in py_files:
-        rel = _rel_posix(abs_path, project_dir)
-
-        # Use parse_cache if available to avoid re-reading + re-parsing.
-        # Cache gives us is_parseable; we still need a live ast.parse for
-        # _RuntimeVisitor which requires traversing the AST.  The cache check
-        # lets us skip unparseable files cheaply without reading/parsing.
-        if parse_cache is not None:
-            cached = parse_cache.get_or_parse(abs_path, project_dir)
-            if not cached.is_parseable:
-                _log.debug("build_runtime_map_static: skipping unparseable (cache): %s", rel)
-                continue
-            # Reuse cached source if available (avoid re-reading disk)
-            source = parse_cache.get_cached_source(abs_path)
-            if source is None:
-                # Fallback: cache miss on source (should be rare)
-                try:
-                    source = abs_path.read_text(encoding="utf-8", errors="replace")
-                except OSError as exc:
-                    from .map_errors import MapBuilderError  # noqa: PLC0415
-                    raise MapBuilderError(
-                        "build_runtime_map_static: cannot read %s: %s" % (abs_path, exc)
-                    ) from exc
-            try:
-                tree = ast.parse(source, filename=rel)
-            except SyntaxError:
-                _log.debug("build_runtime_map_static: skipping unparseable file: %s", rel)
-                continue
-        else:
-            # Backward-compat: no cache
-            try:
-                source = abs_path.read_text(encoding="utf-8", errors="replace")
-            except OSError as exc:
-                from .map_errors import MapBuilderError  # noqa: PLC0415
-                raise MapBuilderError(
-                    "build_runtime_map_static: cannot read %s: %s" % (abs_path, exc)
-                ) from exc
-
-            try:
-                tree = ast.parse(source, filename=rel)
-            except SyntaxError:
-                _log.debug("build_runtime_map_static: skipping unparseable file: %s", rel)
-                continue
-
-        visitor = _RuntimeVisitor(rel)
-        visitor.visit(tree)
-
-        for raw in visitor.results:
-            name = raw["node"]
-            if name in auto_raw:
-                existing = auto_raw[name]
-                existing["tags"] = list(set(existing["tags"]) | set(raw["tags"]))
-                existing["env_vars"] = list(set(existing["env_vars"]) | set(raw["env_vars"]))
-                existing["side_effects"] = list(
-                    set(existing["side_effects"]) | set(raw["side_effects"])
-                )
-                # Preserve entry-function call targets (order-stable union).
-                for c in raw.get("calls", ()):
-                    if c not in existing["calls"]:
-                        existing["calls"].append(c)
-            else:
-                auto_raw[name] = {
-                    "node": name,
-                    "kind": raw["kind"],
-                    "tags": list(raw["tags"]),
-                    "env_vars": list(raw["env_vars"]),
-                    "side_effects": list(raw["side_effects"]),
-                    "calls": list(raw.get("calls", ())),
-                    "evidence": raw["evidence"],
-                    "defined_in": name.split(":")[0] if ":" in name else name,
-                }
-
-    _log.debug("build_runtime_map_static: auto-discovered %d raw nodes", len(auto_raw))
-
-    # 3. Build inferred RuntimeNode objects, skipping seed conflicts
+    # 2. Auto-discover via the unified adapter dispatch.
+    # collect_adapter_runtime_nodes builds the FULL auto node set for ALL
+    # languages: Python via build_python_runtime_nodes (rich _RuntimeVisitor +
+    # merge + seed skip + global sort -- routed through PythonAdapter), then
+    # Go/Java/TS/JS via _signal_to_node (unchanged). Python's seed-conflict
+    # skip needs the seed names, so they are passed through.
+    seed_node_names = frozenset(seed_index)
     auto_nodes: list[RuntimeNode] = []
-    for name, raw in sorted(auto_raw.items()):
-        if name in seed_index:
-            _log.debug(
-                "build_runtime_map_static: seed canonical wins for node %r", name
-            )
-            continue
-        auto_nodes.append(RuntimeNode(
-            node=name,
-            defined_in=raw["defined_in"],
-            kind=raw["kind"],
-            calls=tuple(raw.get("calls", ())),
-            side_effects=tuple(sorted(set(raw["side_effects"]))),
-            depends_on_env=tuple(sorted(set(raw["env_vars"]))),
-            order_constraints=(),
-            hidden_runtime_dependencies=(),
-            tags=tuple(sorted(set(raw["tags"]))),
-            source="static_scan",
-            evidence=raw["evidence"],
-            confidence=0.75,
-            freshness=freshness,
-            status="inferred",
-        ))
-
-    # 4. Collect TS/JS adapter runtime nodes and append
     try:
         from ._runtime_dispatch import collect_adapter_runtime_nodes  # noqa: PLC0415
-        adapter_nodes = collect_adapter_runtime_nodes(project_dir, _freshness_now)
-        auto_nodes.extend(adapter_nodes)
+        auto_nodes = collect_adapter_runtime_nodes(
+            project_dir,
+            _freshness_now,
+            include_roots=list(include_roots) if include_roots is not None else None,
+            seed_node_names=seed_node_names,
+            parse_cache=parse_cache,
+        )
         _log.debug(
-            "build_runtime_map_static: adapter dispatch added %d nodes", len(adapter_nodes)
+            "build_runtime_map_static: adapter dispatch produced %d auto nodes",
+            len(auto_nodes),
         )
     except Exception as exc:  # noqa: BLE001
         _log.error(
@@ -314,15 +360,15 @@ def build_runtime_map_static(
             exc,
         )
 
-    # 5. Merge: canonical seed first, inferred auto second
+    # 3. Merge: canonical seed first, inferred auto second
     merged: list[RuntimeNode] = list(seed_nodes) + auto_nodes
 
     elapsed = time.monotonic() - t_start
     _SLA_SECONDS = 20.0
     if elapsed > _SLA_SECONDS:
         _log.warning(
-            "build_runtime_map_static: SLA exceeded -- %.2fs > %.1fs (%d files, %d nodes)",
-            elapsed, _SLA_SECONDS, len(py_files), len(merged),
+            "build_runtime_map_static: SLA exceeded -- %.2fs > %.1fs (%d nodes)",
+            elapsed, _SLA_SECONDS, len(merged),
         )
     else:
         _log.info(

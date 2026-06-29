@@ -4,20 +4,22 @@ Does NOT use regex. Does NOT depend on ``_lexer``. Uses ``ast.parse``
 exclusively, inheriting empty-list fallbacks from ``RegexAdapterBase`` for
 capability methods not yet wired into builders (L1 stubs).
 
-Capabilities (pipeline wiring as of the Python-unify refactor):
+Capabilities (pipeline wiring as of the authority-unify refactor):
     - extract_imports: AST walker; LIVE -- structural_builder consumes it.
     - extract_symbols: AST walker; LIVE -- structural_builder consumes it.
     - extract_contracts: AST entity+shape+serializer extraction; LIVE --
       data_contract_builder consumes it.
+    - extract_writer_calls: FULL Python write-site resolver (delegates to
+      _authority_ast); LIVE -- authority_builder routes Python writes through it
+      (target resolution + provenance + os.replace/open/json.dump). The enriched
+      AuthorityWriteCandidate carries resolved_target/provenance/operation.
     - extract_runtime: AST implementation present, but the Python runtime map
       still uses its dedicated builder (not yet unified -- needs the rich
       _RuntimeVisitor merge logic).
-    - extract_writer_calls: AST implementation present, but the Python authority
-      map still uses its dedicated builder (target-resolution/provenance not
-      yet ported).
 
-Structural + data_contract maps route Python through the shared adapter path
-(like Go/Java/TS); runtime + authority remain on dedicated Python builders.
+Structural + data_contract + authority maps route Python through the shared
+adapter path (like Go/Java/TS); the runtime map still uses its dedicated
+Python builder.
 """
 from __future__ import annotations
 
@@ -42,11 +44,11 @@ _log = logging.getLogger(__name__)
 class PythonAdapter(RegexAdapterBase):
     """Python adapter using stdlib ``ast``.
 
-    extract_imports / extract_symbols / extract_contracts are fully implemented
-    and LIVE in the pipeline (structural + data_contract maps route Python
-    through them). extract_runtime / extract_writer_calls are implemented but
-    the Python runtime / authority maps still use their dedicated builders
-    (those two map-types were not unified -- see docs/AUTONOMOUS_FIX_PLAN.md).
+    extract_imports / extract_symbols / extract_contracts / extract_writer_calls
+    are fully implemented and LIVE in the pipeline (structural + data_contract +
+    authority maps route Python through them). extract_runtime is implemented
+    but the Python runtime map still uses its dedicated builder (not yet
+    unified -- needs the rich _RuntimeVisitor merge logic).
     """
 
     language = "python"
@@ -358,47 +360,96 @@ class PythonAdapter(RegexAdapterBase):
                         ))
         return out
 
+    def extract_runtime_results(self, content: str, rel: str) -> list[dict]:
+        """Run the FULL Python runtime visitor and return its raw per-file results.
+
+        Routes the runtime map's Python extraction through this adapter (the
+        unified source-adapter path) using the SAME byte-identical
+        ``_runtime_ast._RuntimeVisitor`` the runtime builder used historically:
+        module-level side-effect detection MERGED into one ``<rel>:module`` node,
+        ``if __name__ == "__main__"`` entrypoint blocks + their invoked
+        entry-function cross-reference, route/dispatch decorators, background-task
+        spawns inside init-style functions, and ``os.environ`` reads.
+
+        Returns the visitor's ``results`` list of raw dicts (node / kind / tags /
+        env_vars / side_effects / calls / evidence).  The runtime builder applies
+        the same cross-result merge + seed-conflict resolution it always has, so
+        the resulting ``RuntimeNode`` entries are byte-identical to the
+        dedicated-builder era.  Returns [] on ``SyntaxError`` without raising.
+
+        ``rel`` is the project-relative posix path used to namespace node ids
+        (e.g. ``"pkg/app.py:module"``) -- the builder passes the same value it
+        historically passed to ``_RuntimeVisitor(rel)``.
+        """
+        from .._runtime_ast import _RuntimeVisitor  # noqa: PLC0415
+
+        try:
+            tree = ast.parse(content, filename=rel)
+        except SyntaxError:
+            return []
+        visitor = _RuntimeVisitor(rel)
+        visitor.visit(tree)
+        return visitor.results
+
     # ------------------------------------------------------------------
     # Authority writes: .write_text/.write_bytes/.save/json.dump/open("w")
     # ------------------------------------------------------------------
 
+    # Per-operation extraction confidence (mirrors the legacy thin-adapter
+    # values so byte-level metadata is preserved for consumers that read it).
+    _WRITE_CONFIDENCE = {
+        "write_text": 0.9,
+        "write_bytes": 0.9,
+        "save": 0.7,
+        "os.replace": 0.9,
+        "json_dump": 0.9,
+        "open_write": 0.8,
+    }
+
     def extract_writer_calls(
         self, content: str, path: Path
     ) -> list[AuthorityWriteCandidate]:
-        """Detect write/save operations via ``ast`` (parity with other adapters)."""
+        """Detect write/save operations via the FULL Python authority resolver.
+
+        Runs the same byte-identical AST resolver the authority builder used
+        historically (``_authority_ast._collect_assignments`` +
+        ``_scan_write_calls``): write-target resolution (``Path("literal")``,
+        variable + alias chains, ``self.attr``), ``os.replace`` atomic-rename
+        targets, ``open(..., mode)`` precision (reads excluded), ``json.dump``
+        targets, and provenance tracking (path_constructor / string_literal /
+        function_parameter / unknown).
+
+        Each resolved :class:`WriteCall` becomes one
+        :class:`AuthorityWriteCandidate` carrying the additive
+        ``resolved_target`` / ``provenance`` / ``operation`` fields so the
+        builder's Python consumption branch reproduces the dedicated-builder
+        output exactly.  ``write_kind`` mirrors ``operation`` and ``target_hint``
+        is the receiver name (kept for the legacy thin-candidate contract /
+        parity tests).  Returns [] on ``SyntaxError`` without raising.
+        """
+        # Imported lazily to avoid any import-time coupling between the adapter
+        # package and the mapper builders.
+        from .._authority_ast import _collect_assignments, _scan_write_calls
+
         try:
             tree = ast.parse(content)
         except SyntaxError:
             return []
+
+        assignments_typed, aliases = _collect_assignments(tree)
+        write_calls = _scan_write_calls(tree, assignments_typed, aliases)
+
+        # Map node line -> receiver hint so candidates keep the legacy
+        # target_hint (best-effort receiver name) without re-walking semantics.
         out: list[AuthorityWriteCandidate] = []
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            fn = self._dotted(node.func)
-            leaf = fn.split(".")[-1]
-            ln = int(getattr(node, "lineno", 0) or 0)
-            if leaf in ("write_text", "write_bytes"):
-                out.append(AuthorityWriteCandidate(
-                    write_kind=leaf, target_hint=self._receiver_hint(node.func),
-                    line=ln, confidence=0.9,
-                ))
-            elif leaf == "save":
-                out.append(AuthorityWriteCandidate(
-                    write_kind="save", target_hint=self._receiver_hint(node.func),
-                    line=ln, confidence=0.7,
-                ))
-            elif fn in ("json.dump",):
-                out.append(AuthorityWriteCandidate(
-                    write_kind="json_dump", target_hint="", line=ln, confidence=0.9,
-                ))
-            elif leaf == "open" and len(node.args) >= 2:
-                mode = node.args[1]
-                if (
-                    isinstance(mode, ast.Constant)
-                    and isinstance(mode.value, str)
-                    and any(c in mode.value for c in "wax+")
-                ):
-                    out.append(AuthorityWriteCandidate(
-                        write_kind="open_write", target_hint="", line=ln, confidence=0.8,
-                    ))
+        for wc in write_calls:
+            out.append(AuthorityWriteCandidate(
+                write_kind=wc.operation,
+                target_hint="",
+                line=wc.line if wc.line is not None else 0,
+                confidence=self._WRITE_CONFIDENCE.get(wc.operation, 0.7),
+                resolved_target=wc.target,
+                provenance=wc.provenance,
+                operation=wc.operation,
+            ))
         return out

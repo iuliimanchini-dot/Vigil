@@ -160,9 +160,30 @@ class AuthorityWriteCandidate:
                      name or path fragment) -- empty string if unknown.
         line: 1-based line number.
         confidence: Extraction confidence in [0.0, 1.0].
+        resolved_target: AST-resolved write-target path, or the sentinel
+                     ``"__unknown_target__"`` when the target could not be
+                     resolved.  Populated by adapters that perform full
+                     target resolution (PythonAdapter); defaults to
+                     ``"__unknown_target__"`` so regex adapters (Go/Java/TS)
+                     and their parity tests are byte-for-byte unaffected.
+        provenance: How ``resolved_target`` was derived -- one of
+                     ``"path_constructor"`` / ``"string_literal"`` /
+                     ``"function_parameter"`` / ``"unknown"``.  Defaults to
+                     ``"unknown"`` for regex adapters.
+        operation: The concrete write operation as the authority builder
+                     records it -- ``"write_text"`` / ``"write_bytes"`` /
+                     ``"os.replace"`` / ``"save"`` / ``"open_write"`` /
+                     ``"json_dump"`` / ``"unknown"``.  Defaults to empty string
+                     for regex adapters (which only carry ``write_kind``).
     """
 
     write_kind: str
     target_hint: str
     line: int
     confidence: float
+    # Optional richer fields (additive; defaults keep regex adapters and their
+    # parity tests byte-identical). Populated only by PythonAdapter, which runs
+    # the full write-site resolver (see _authority_ast.py).
+    resolved_target: str = "__unknown_target__"
+    provenance: str = "unknown"
+    operation: str = ""
