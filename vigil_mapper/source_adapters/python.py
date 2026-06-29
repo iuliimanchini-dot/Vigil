@@ -4,15 +4,20 @@ Does NOT use regex. Does NOT depend on ``_lexer``. Uses ``ast.parse``
 exclusively, inheriting empty-list fallbacks from ``RegexAdapterBase`` for
 capability methods not yet wired into builders (L1 stubs).
 
-Capabilities:
-    - extract_imports: working AST walker (``ast.Import`` / ``ast.ImportFrom``).
-    - extract_symbols: working AST walker (top-level class / function defs).
-    - extract_contracts: L1 stub -- returns []. L3+ wires data_contract_builder.
-    - extract_runtime: L1 stub -- returns []. L3+ wires runtime_builder.
-    - extract_writer_calls: L1 stub -- returns []. L3+ wires authority_builder.
+Capabilities (pipeline wiring as of the Python-unify refactor):
+    - extract_imports: AST walker; LIVE -- structural_builder consumes it.
+    - extract_symbols: AST walker; LIVE -- structural_builder consumes it.
+    - extract_contracts: AST entity+shape+serializer extraction; LIVE --
+      data_contract_builder consumes it.
+    - extract_runtime: AST implementation present, but the Python runtime map
+      still uses its dedicated builder (not yet unified -- needs the rich
+      _RuntimeVisitor merge logic).
+    - extract_writer_calls: AST implementation present, but the Python authority
+      map still uses its dedicated builder (target-resolution/provenance not
+      yet ported).
 
-Builders do NOT consume IR in L1 -- they continue calling their internal
-helpers directly. PythonAdapter is ready for L2+ dispatch wiring.
+Structural + data_contract maps route Python through the shared adapter path
+(like Go/Java/TS); runtime + authority remain on dedicated Python builders.
 """
 from __future__ import annotations
 
@@ -35,12 +40,13 @@ _log = logging.getLogger(__name__)
 
 
 class PythonAdapter(RegexAdapterBase):
-    """Python adapter using stdlib ``ast``. All four map capabilities declared.
+    """Python adapter using stdlib ``ast``.
 
-    extract_imports and extract_symbols are fully implemented via AST walking.
-    extract_contracts, extract_runtime, and extract_writer_calls are L1 stubs
-    that return empty lists -- their existing builder implementations remain
-    authoritative until L3+ dispatch wiring.
+    extract_imports / extract_symbols / extract_contracts are fully implemented
+    and LIVE in the pipeline (structural + data_contract maps route Python
+    through them). extract_runtime / extract_writer_calls are implemented but
+    the Python runtime / authority maps still use their dedicated builders
+    (those two map-types were not unified -- see docs/AUTONOMOUS_FIX_PLAN.md).
     """
 
     language = "python"
