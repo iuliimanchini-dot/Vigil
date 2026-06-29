@@ -4,6 +4,23 @@ All notable changes to `vigil-codeintel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project
 uses [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] — 2026-06-29
+
+### Added
+- **Authority target resolution across all languages** — write-site maps now resolve the
+  actual target path/resource, not just the receiver variable. Go, Java, TypeScript,
+  JavaScript, and Swift adapters trace string-literal / variable-assignment / path-builder
+  targets (`filepath.Join`, `Paths.get`/`Path.of`, `path.join`, `URL(fileURLWithPath:)`,
+  `appendingPathComponent`) into `resolved_target` + `provenance` (`string_literal` /
+  `path_constructor` / `function_parameter`); unresolvable targets stay
+  `__unknown_target__` (never a guessed path). The authority map surfaces resolved
+  targets + provenance for every language (previously Python-only). Oracle corpora under
+  `tests/oracle_target_*/`.
+
+### Changed
+- `authority_builder` now prefers an adapter's `resolved_target`/`provenance` when the
+  adapter resolved it, falling back to the thin `target_hint`/unknown otherwise.
+
 ## [0.1.2] — 2026-06-29
 
 ### Added
