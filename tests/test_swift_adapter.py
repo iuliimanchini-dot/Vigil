@@ -198,8 +198,27 @@ class TestSwiftIRDefaults:
             assert c.shape == {}
             assert c.serializer_shapes == {}
 
-    def test_write_resolver_fields_default(self, adapter: SwiftAdapter, main_src: str):
-        for w in adapter.extract_writer_calls(main_src, MAIN):
+    def test_write_resolver_fields(self, adapter: SwiftAdapter, main_src: str):
+        # Swift now resolves the labeled path argument (to:/atPath:) into
+        # resolved_target + provenance (see test_swift_target_resolution.py).
+        # ``operation`` stays "" (Python-only field). The two receiver-only
+        # saves keep the unknown sentinel; the two fs writes resolve.
+        by_line = {w.line: w for w in adapter.extract_writer_calls(main_src, MAIN)}
+        for w in by_line.values():
+            assert w.operation == ""
+
+        # document.save() / store.save() — receivers, no resolvable path.
+        saves = [w for w in by_line.values() if w.write_kind == "orm_save"]
+        assert len(saves) == 2
+        for w in saves:
             assert w.resolved_target == "__unknown_target__"
             assert w.provenance == "unknown"
-            assert w.operation == ""
+
+        # data.write(to: url) where let url = URL(fileURLWithPath: "/tmp/out.dat")
+        # -> traced through the variable to the URL path-constructor.
+        assert by_line[11].resolved_target == "/tmp/out.dat"
+        assert by_line[11].provenance == "path_constructor"
+
+        # FileManager.default.createFile(atPath: "/tmp/file.txt", ...) -> literal.
+        assert by_line[13].resolved_target == "/tmp/file.txt"
+        assert by_line[13].provenance == "string_literal"

@@ -65,6 +65,23 @@ _TYPE_DECL_KIND: dict[str, str] = {
     "actor": "class",
 }
 
+# Target-resolution constants (mirror the Go adapter / _authority_ast.py
+# provenance vocabulary so every adapter speaks the same provenance levels).
+_UNKNOWN_TARGET = "__unknown_target__"
+_PROVENANCE_PATH_CONSTRUCTOR = "path_constructor"  # URL(fileURLWithPath:), appendingPathComponent
+_PROVENANCE_STRING_LITERAL = "string_literal"      # "literal_path"
+_PROVENANCE_FUNCTION_PARAM = "function_parameter"  # func f(target: String)
+_PROVENANCE_UNKNOWN = "unknown"
+
+# Swift path-constructor calls: a write target wrapped in one of these is a
+# path-building expression (analogous to Go's filepath.Join).  Each takes a
+# single path-ish argument we unwrap to find the underlying literal/variable.
+_URL_PATH_CTORS = frozenset({"URL"})                       # URL(fileURLWithPath: "x")
+_PATH_BUILDER_METHODS = frozenset({"appendingPathComponent"})  # base.appendingPathComponent("x")
+
+# Argument labels that name the FILE-PATH target of a writer call.
+_TARGET_ARG_LABELS = frozenset({"to", "atPath"})
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -175,6 +192,217 @@ def _call_callee(call) -> object | None:
         if child.is_named and child.type != "call_suffix":
             return child
     return None
+
+
+# ---------------------------------------------------------------------------
+# Target resolution (Swift write-site analysis -- mirrors the Go PoC)
+# ---------------------------------------------------------------------------
+
+def _string_literal_value(node, src: bytes) -> str | None:
+    """Return the bare value of a Swift ``line_string_literal`` node, else None.
+
+    The bare text lives in the ``line_str_text`` child; an empty literal ``""``
+    has no such child and returns "".  Non-string / interpolated literals
+    (those whose only content is an interpolation) yield None or "" and are
+    treated as unresolvable by the caller's plausible-path guard.
+    """
+    if node is None or node.type != "line_string_literal":
+        return None
+    text_parts: list[str] = []
+    saw_text = False
+    for child in node.children:
+        if child.type == "line_str_text":
+            text_parts.append(node_text(child, src))
+            saw_text = True
+        elif child.type in ("interpolation", "str_escaped_char"):
+            # Interpolation / escapes make the literal non-constant -> not a
+            # plain resolvable path. Signal "" so the guard rejects it.
+            return ""
+    if not saw_text:
+        return ""
+    return "".join(text_parts)
+
+
+def _is_plausible_path(s: str) -> bool:
+    """True iff *s* looks like a file path (mirror of the Go/Python guard)."""
+    if not s or len(s) > 512:
+        return False
+    if "\n" in s or "\r" in s:
+        return False
+    if Path(s).name in {"Makefile", "Dockerfile", "Procfile", "LICENSE", "README"}:
+        return True
+    if "/" not in s and "\\" not in s and "." not in s:
+        return False
+    return True
+
+
+def _call_first_value_arg(call, src: bytes, label_filter: frozenset[str] | None = None):
+    """Return the value node of the first matching ``value_argument`` of *call*.
+
+    When *label_filter* is given, return the value of the first argument whose
+    label is in the filter; otherwise return the first positional value.
+    Returns None when no such argument exists.
+    """
+    for child in call.children:
+        if child.type != "call_suffix":
+            continue
+        for gc in child.children:
+            if gc.type != "value_arguments":
+                continue
+            for va in gc.children:
+                if va.type != "value_argument":
+                    continue
+                label = None
+                value = None
+                for vac in va.children:
+                    if vac.type == "value_argument_label":
+                        label = node_text(vac, src).strip()
+                    elif vac.is_named and vac.type != "value_argument_label":
+                        value = vac
+                if label_filter is None:
+                    if value is not None:
+                        return value
+                elif label in label_filter:
+                    return value
+    return None
+
+
+def _resolve_path_ctor(value_node, src: bytes) -> tuple[str, str] | None:
+    """Resolve a Swift path-constructor call to (path, path_constructor), else None.
+
+    Handles ``URL(fileURLWithPath: <literal>)`` and
+    ``base.appendingPathComponent(<literal>)`` -- both unwrap to the single
+    string-literal argument.  Returns None when the node is not such a call or
+    its argument is not a string literal (variable / nested non-literal ->
+    cannot fully resolve, no guess).
+    """
+    if value_node is None or value_node.type != "call_expression":
+        return None
+    callee = _call_callee(value_node)
+    receiver, method = _navigation_method(callee, src)
+
+    is_url_ctor = (not receiver) and method in _URL_PATH_CTORS
+    is_path_builder = method in _PATH_BUILDER_METHODS
+    if not (is_url_ctor or is_path_builder):
+        return None
+
+    inner = _call_first_value_arg(value_node, src, label_filter=None)
+    lit = _string_literal_value(inner, src)
+    if lit is not None and lit != "":
+        return (lit, _PROVENANCE_PATH_CONSTRUCTOR)
+    return None
+
+
+def _value_provenance(value_node, src: bytes) -> tuple[str, str] | None:
+    """Map a single value node to (path, provenance), else None.
+
+    Resolution order: bare string literal -> URL()/appendingPathComponent
+    path-constructor of a literal.
+    """
+    if value_node is None:
+        return None
+    lit = _string_literal_value(value_node, src)
+    if lit is not None and lit != "":
+        return (lit, _PROVENANCE_STRING_LITERAL)
+    ctor = _resolve_path_ctor(value_node, src)
+    if ctor is not None:
+        return ctor
+    return None
+
+
+def _collect_swift_assignments(root, src: bytes) -> dict[str, tuple[str, str]]:
+    """Return ``name -> (resolved_path, provenance)`` for the whole file.
+
+    Two passes (lower precedence first), mirroring the Go/Python resolver:
+      PASS 1: function PARAMETERS -> ("", function_parameter).
+      PASS 2: ``let``/``var`` property declarations overwrite params.
+
+    Property forms handled (value must be a single resolvable expression):
+      - ``let p = "out.json"``                       -> string_literal
+      - ``let u = URL(fileURLWithPath: "x.json")``   -> path_constructor
+    """
+    assignments: dict[str, tuple[str, str]] = {}
+
+    # PASS 1: function parameters (lowest precedence).
+    for param in walk_named(root, "parameter"):
+        for child in param.children:
+            if child.is_named and child.type == "simple_identifier":
+                assignments[node_text(child, src)] = ("", _PROVENANCE_FUNCTION_PARAM)
+                break
+
+    # PASS 2: property declarations (let/var) with an initializer.
+    for prop in walk_named(root, "property_declaration"):
+        name = ""
+        for child in prop.children:
+            if child.type == "pattern":
+                for gc in child.children:
+                    if gc.is_named and gc.type == "simple_identifier":
+                        name = node_text(gc, src)
+                        break
+                break
+        if not name:
+            continue
+        # The value is the named node following the '=' token.
+        value_node = None
+        seen_eq = False
+        for child in prop.children:
+            if child.type == "=":
+                seen_eq = True
+                continue
+            if seen_eq and child.is_named:
+                value_node = child
+                break
+        resolved = _value_provenance(value_node, src)
+        if resolved is not None:
+            assignments[name] = resolved
+
+    return assignments
+
+
+def _resolve_target_value(
+    value_node, src: bytes, assignments: dict[str, tuple[str, str]]
+) -> tuple[str, str]:
+    """Resolve a writer's target-argument value node to ``(target, provenance)``.
+
+    Returns ``(_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)`` when unresolvable -- never
+    a guessed/false target.  Mirrors the Go resolver order: inline literal ->
+    inline path-constructor -> identifier (assignment / parameter).
+    """
+    if value_node is None:
+        return (_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)
+
+    # 1 + 2: inline string literal or URL()/appendingPathComponent of a literal.
+    inline = _value_provenance(value_node, src)
+    if inline is not None:
+        path, prov = inline
+        if _is_plausible_path(path):
+            return (path, prov)
+
+    # 3. Bare identifier -> assignment / parameter.
+    #    Also unwrap URL(fileURLWithPath: <identifier>) so a wrapped variable /
+    #    parameter is still traced.
+    ident_node = None
+    if value_node.type == "simple_identifier":
+        ident_node = value_node
+    elif value_node.type == "call_expression":
+        callee = _call_callee(value_node)
+        receiver, method = _navigation_method(callee, src)
+        if ((not receiver and method in _URL_PATH_CTORS) or method in _PATH_BUILDER_METHODS):
+            inner = _call_first_value_arg(value_node, src, label_filter=None)
+            if inner is not None and inner.type == "simple_identifier":
+                ident_node = inner
+
+    if ident_node is not None:
+        name = node_text(ident_node, src)
+        entry = assignments.get(name)
+        if entry is not None:
+            path, prov = entry
+            if prov == _PROVENANCE_FUNCTION_PARAM:
+                return (_UNKNOWN_TARGET, _PROVENANCE_FUNCTION_PARAM)
+            if path and _is_plausible_path(path):
+                return (path, prov)
+
+    return (_UNKNOWN_TARGET, _PROVENANCE_UNKNOWN)
 
 
 # ---------------------------------------------------------------------------
@@ -498,14 +726,30 @@ class SwiftAdapter(RegexAdapterBase):
         callee):
 
         - ``data.write(to: url)``  (Data / String write-to-URL)
-              → ``write_kind="fs_write"``, target_hint = receiver text
-        - ``FileManager.*.createFile(...)`` / ``.removeItem(...)`` /
+              → ``write_kind="fs_write"``, target resolved from the ``to:`` arg
+        - ``FileManager.*.createFile(atPath:...)`` / ``.removeItem(...)`` /
           ``.copyItem(...)`` / ``.moveItem(...)``  (FileManager mutations)
-              → ``write_kind="fs_write"``, target_hint = receiver text
+              → ``write_kind="fs_write"``, target resolved from the ``atPath:`` arg
+              (createFile); the other mutations keep the receiver hint / unknown
         - ``*.save(...)``  (Core Data / repository save)
               → ``write_kind="orm_save"``, target_hint = receiver text
         - ``*.write(...)``  (any other receiver — stream/handle write)
-              → ``write_kind="fs_write"``, target_hint = receiver text
+              → ``write_kind="fs_write"``, target resolved from the ``to:`` arg
+                when present, else unknown
+
+        Target resolution (additive — mirrors the Go PoC / Python resolver).
+        The labeled path argument (``to:`` for ``write``; ``atPath:`` for
+        ``createFile``) is resolved into ``resolved_target`` + ``provenance``:
+
+        - string-literal arg                 → literal, ``provenance="string_literal"``
+        - ``URL(fileURLWithPath: "x")`` /     → ``provenance="path_constructor"``
+          ``base.appendingPathComponent("x")``  (path-builder call of a literal)
+        - variable arg (``let``/``var``)      → traced to its property declaration
+          in scope (string literal or path-constructor of a literal)
+        - parameter arg (incl. wrapped in     → ``provenance="function_parameter"``
+          ``URL(fileURLWithPath: param)``)       (target stays ``__unknown_target__``)
+        - unresolvable, incl. receiver-only   → ``resolved_target="__unknown_target__"``,
+          writes (``save`` / ``removeItem`` …)   ``provenance="unknown"`` (no guess)
 
         Test files return ``[]``.  All results carry ``confidence=1.0``.
         Results are sorted by ``(line, write_kind)``.
@@ -516,6 +760,9 @@ class SwiftAdapter(RegexAdapterBase):
         _log.debug("extract_writer_calls (tree-sitter): %s (%d chars)", path, len(content))
         src: bytes = content.encode("utf-8", errors="replace")
         root = parse_bytes(_LANGUAGE, src)
+
+        # Resolve let/var / parameter bindings once for the whole file.
+        assignments = _collect_swift_assignments(root, src)
 
         candidates: list[AuthorityWriteCandidate] = []
 
@@ -539,14 +786,20 @@ class SwiftAdapter(RegexAdapterBase):
 
             # FileManager mutations (createFile/removeItem/copyItem/moveItem)
             if method in _FILEMANAGER_METHODS:
+                # createFile carries the path in atPath:; the other mutations
+                # take URLs/paths positionally and are left unresolved here.
+                target_value = _call_first_value_arg(call, src, _TARGET_ARG_LABELS)
+                resolved, prov = _resolve_target_value(target_value, src, assignments)
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="fs_write",
                     target_hint=_hint(receiver),
                     line=line,
                     confidence=1.0,
+                    resolved_target=resolved,
+                    provenance=prov,
                 ))
 
-            # *.save(...) — Core Data / repository persistence
+            # *.save(...) — Core Data / repository persistence (receiver, no path)
             elif method == "save":
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="orm_save",
@@ -555,13 +808,19 @@ class SwiftAdapter(RegexAdapterBase):
                     confidence=1.0,
                 ))
 
-            # *.write(...) — Data.write(to:), stream/handle writes
+            # *.write(...) — Data.write(to:), stream/handle writes. The path
+            # lives in the to: argument; stream/handle writes without it stay
+            # unresolved.
             elif method == "write":
+                target_value = _call_first_value_arg(call, src, _TARGET_ARG_LABELS)
+                resolved, prov = _resolve_target_value(target_value, src, assignments)
                 candidates.append(AuthorityWriteCandidate(
                     write_kind="fs_write",
                     target_hint=_hint(receiver),
                     line=line,
                     confidence=1.0,
+                    resolved_target=resolved,
+                    provenance=prov,
                 ))
 
         candidates.sort(key=lambda c: (c.line, c.write_kind))
