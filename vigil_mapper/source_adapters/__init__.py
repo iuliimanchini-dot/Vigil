@@ -9,10 +9,11 @@ Public API:
     IR signal classes     -- ImportEdge, SymbolDef, ContractCandidate,
                             RuntimeSignal, AuthorityWriteCandidate.
 
-Registry population (current state — all 5 languages registered):
+Registry population (current state — all 6 languages registered):
     Python (.py), TypeScript (.ts, .tsx), JavaScript (.js, .jsx),
-    Go (.go), Java (.java).
-    Historical note: L1 shipped Python only; L2 added TS/JS; L5 added Go/Java.
+    Go (.go), Java (.java), Swift (.swift).
+    Historical note: L1 shipped Python only; L2 added TS/JS; L5 added Go/Java;
+    Swift support added Swift (.swift).
 """
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ from .go import GoAdapter
 from .java import JavaAdapter
 from .javascript import JavascriptAdapter
 from .python import PythonAdapter
+from .swift import SwiftAdapter
 from .typescript import TypescriptAdapter
 
 __all__ = [
@@ -51,6 +53,7 @@ __all__ = [
     "JavascriptAdapter",
     "GoAdapter",
     "JavaAdapter",
+    "SwiftAdapter",
 ]
 
 _log = logging.getLogger(__name__)
@@ -81,12 +84,13 @@ def _register(adapter: SourceAdapter) -> None:
         _log.debug("source_adapters: registered %s for %r", adapter.__class__.__name__, key)
 
 
-# All 5 adapters registered: Python, TypeScript, JavaScript, Go, Java.
+# All 6 adapters registered: Python, TypeScript, JavaScript, Go, Java, Swift.
 _register(PythonAdapter())
 _register(TypescriptAdapter())
 _register(JavascriptAdapter())
 _register(GoAdapter())
 _register(JavaAdapter())
+_register(SwiftAdapter())
 
 
 # ---------------------------------------------------------------------------
