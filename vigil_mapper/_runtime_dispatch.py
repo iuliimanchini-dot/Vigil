@@ -1,7 +1,9 @@
-"""TS/JS adapter runtime signal dispatch -- Map 2 helper.
+"""Adapter runtime node dispatch -- Map 2 helper.
 
-Converts TSRuntimeSignal -> RuntimeNode for all adapters with
-supports_runtime_signals=True (excluding Python which uses the AST path).
+Builds the auto-discovered RuntimeNode set for ALL languages with
+supports_runtime_signals=True. Python uses the rich node-build path
+(runtime_builder.build_python_runtime_nodes, via PythonAdapter); Go/Java/TS/JS
+use the TSRuntimeSignal -> RuntimeNode conversion (_signal_to_node).
 Called by runtime_builder.build_runtime_map_static.
 """
 from __future__ import annotations
@@ -94,44 +96,78 @@ def _signal_to_node(signal: object, freshness_fn: Callable[[], str]) -> RuntimeN
 def collect_adapter_runtime_nodes(
     project_dir: Path,
     freshness_fn: Callable[[], str],
+    include_roots: "list[str] | None" = None,
+    seed_node_names: "frozenset[str] | None" = None,
+    parse_cache: object | None = None,
 ) -> list[RuntimeNode]:
-    """Collect RuntimeNode objects from TS/JS adapter runtime signals.
+    """Collect RuntimeNode objects from ALL runtime adapters (Python included).
 
-    Iterates source files for adapters with supports_runtime_signals=True
-    (non-Python), calls extract_runtime(), and converts signals to RuntimeNodes.
+    The historical ``language != "python"`` guard is gone: this function now
+    builds the full auto-discovered runtime node set for every adapter with
+    ``supports_runtime_signals=True``.  Two node-build paths coexist (the
+    Python-specific path is option (b) from the unify plan -- Go/Java/TS keep
+    their exact ``_signal_to_node`` conversion, unchanged):
+
+      * Python  -> ``build_python_runtime_nodes`` runs the rich
+        ``_RuntimeVisitor`` (via PythonAdapter) + the same cross-result merge +
+        seed-conflict skip + global sort the runtime builder always applied, so
+        the emitted nodes are byte-identical to the dedicated-builder era.
+      * Others  -> ``extract_runtime`` (TSRuntimeSignal) -> ``_signal_to_node``
+        (UNCHANGED -- Go/Java/TS conversion is not touched).
+
+    Ordering matches the legacy build: Python nodes first (globally sorted),
+    then TS/JS/Go/Java nodes in source-file order.
     """
     from .map_common import iter_source_files  # noqa: PLC0415
     from .source_adapters import ADAPTERS      # noqa: PLC0415
 
     nodes: list[RuntimeNode] = []
 
+    # --- Python node-build path (rich): merge + cross-ref + seed skip + sort ---
+    from .runtime_builder import build_python_runtime_nodes  # noqa: PLC0415
+    nodes.extend(build_python_runtime_nodes(
+        project_dir,
+        include_roots=include_roots,
+        seed_node_names=seed_node_names or frozenset(),
+        parse_cache=parse_cache,
+        freshness=freshness_fn(),
+    ))
+
+    # --- Non-Python node-build path (TS/JS/Go/Java): _signal_to_node UNCHANGED ---
+    # NOTE: this `!= "python"` is NOT the removed blocking guard -- it merely
+    # routes Python AWAY from the thin TSRuntimeSignal->_signal_to_node path
+    # (Python is already fully handled above by build_python_runtime_nodes).
+    # Without it, .py files would be re-scanned here and dropped (their thin
+    # RuntimeSignal lacks the `.kind` _signal_to_node reads), which is wasteful
+    # and confusing. The guard that BLOCKED Python from this function entirely
+    # is gone -- Python now flows through it via the rich path.
     runtime_adapters = {
         ext: adapter
         for ext, adapter in ADAPTERS.items()
         if getattr(adapter, "supports_runtime_signals", False)
         and getattr(adapter, "language", "") != "python"
     }
-    if not runtime_adapters:
-        return nodes
+    if runtime_adapters:
+        languages = list({adapter.language for adapter in runtime_adapters.values()})
+        _log.debug("collect_adapter_runtime_nodes: non-python languages=%r", languages)
 
-    languages = list({adapter.language for adapter in runtime_adapters.values()})
-    _log.debug("collect_adapter_runtime_nodes: languages=%r", languages)
+        for src_file in iter_source_files(
+            project_dir, languages=languages, include_roots=include_roots
+        ):
+            adapter = ADAPTERS.get(src_file.suffix.lower())
+            if adapter is None or not getattr(adapter, "supports_runtime_signals", False):
+                continue
+            try:
+                content = src_file.read_text(encoding="utf-8", errors="replace")
+                signals = adapter.extract_runtime(content, src_file)
+            except Exception as exc:  # noqa: BLE001
+                _log.error("collect_adapter_runtime_nodes: failed for %s: %s", src_file, exc)
+                continue
 
-    for src_file in iter_source_files(project_dir, languages=languages):
-        adapter = ADAPTERS.get(src_file.suffix.lower())
-        if adapter is None or not getattr(adapter, "supports_runtime_signals", False):
-            continue
-        try:
-            content = src_file.read_text(encoding="utf-8", errors="replace")
-            signals = adapter.extract_runtime(content, src_file)
-        except Exception as exc:  # noqa: BLE001
-            _log.error("collect_adapter_runtime_nodes: failed for %s: %s", src_file, exc)
-            continue
-
-        for sig in signals:
-            node = _signal_to_node(sig, freshness_fn)
-            if node is not None:
-                nodes.append(node)
+            for sig in signals:
+                node = _signal_to_node(sig, freshness_fn)
+                if node is not None:
+                    nodes.append(node)
 
     _log.debug("collect_adapter_runtime_nodes: collected %d nodes", len(nodes))
     return nodes

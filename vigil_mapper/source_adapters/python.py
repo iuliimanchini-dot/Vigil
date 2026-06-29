@@ -360,6 +360,37 @@ class PythonAdapter(RegexAdapterBase):
                         ))
         return out
 
+    def extract_runtime_results(self, content: str, rel: str) -> list[dict]:
+        """Run the FULL Python runtime visitor and return its raw per-file results.
+
+        Routes the runtime map's Python extraction through this adapter (the
+        unified source-adapter path) using the SAME byte-identical
+        ``_runtime_ast._RuntimeVisitor`` the runtime builder used historically:
+        module-level side-effect detection MERGED into one ``<rel>:module`` node,
+        ``if __name__ == "__main__"`` entrypoint blocks + their invoked
+        entry-function cross-reference, route/dispatch decorators, background-task
+        spawns inside init-style functions, and ``os.environ`` reads.
+
+        Returns the visitor's ``results`` list of raw dicts (node / kind / tags /
+        env_vars / side_effects / calls / evidence).  The runtime builder applies
+        the same cross-result merge + seed-conflict resolution it always has, so
+        the resulting ``RuntimeNode`` entries are byte-identical to the
+        dedicated-builder era.  Returns [] on ``SyntaxError`` without raising.
+
+        ``rel`` is the project-relative posix path used to namespace node ids
+        (e.g. ``"pkg/app.py:module"``) -- the builder passes the same value it
+        historically passed to ``_RuntimeVisitor(rel)``.
+        """
+        from .._runtime_ast import _RuntimeVisitor  # noqa: PLC0415
+
+        try:
+            tree = ast.parse(content, filename=rel)
+        except SyntaxError:
+            return []
+        visitor = _RuntimeVisitor(rel)
+        visitor.visit(tree)
+        return visitor.results
+
     # ------------------------------------------------------------------
     # Authority writes: .write_text/.write_bytes/.save/json.dump/open("w")
     # ------------------------------------------------------------------
