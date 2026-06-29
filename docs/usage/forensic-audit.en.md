@@ -10,6 +10,7 @@ Supported languages:
 
 - **Python** — full support (the deepest gates target Python).
 - **Go, Java, JavaScript, TypeScript** — partial support via adapters (shallower than Python).
+- **Swift** — partial support: the language-agnostic gates plus two Swift-specific safety gates — `swift.force_unwrap` and `swift.implicitly_unwrapped_optional` (IUO). Depth is shallower than Python, comparable to Go / Java.
 
 ## What it gives you
 
@@ -103,7 +104,7 @@ Being honest about what it does *not* do:
 - **SQL-injection detection is narrow.** It fires only when the tainted string is the **direct** argument of `.execute()`. There is no taint-tracking across variables, so an injection assembled through intermediate variables can be missed.
 - **A scan can take ~20s on very large projects** (a per-gate AST walk).
 - **The false-positive rate on large codebases has not been verified line by line.** It is recall-oriented, so expect noise on big projects and triage accordingly.
-- **Depth is uneven across languages.** Some gates are deepest for Python; Go / Java / JS / TS are shallower.
+- **Depth is uneven across languages.** Some gates are deepest for Python; Go / Java / JS / TS / Swift are shallower.
 - It does **not** run your code, so anything that only manifests at runtime is out of scope. (For structural understanding — entry points, who writes what, dependency maps — use the companion `code-map` server.)
 
 ## Tuning

@@ -10,6 +10,7 @@
 
 - **Python**——完整支持（最深入的检查项针对 Python）。
 - **Go、Java、JavaScript、TypeScript**——通过适配器提供部分支持（比 Python 浅）。
+- **Swift**——部分支持：与语言无关的检查项，外加两个 Swift 专属的安全检查项——`swift.force_unwrap` 和 `swift.implicitly_unwrapped_optional`（IUO）。深度比 Python 浅，与 Go / Java 相当。
 
 ## 它能给你什么
 
@@ -103,7 +104,7 @@ C:\Users\You\path\to\vigil\.venv\Scripts\python.exe
 - **SQL 注入检测范围很窄。** 仅当被污染的字符串是 `.execute()` 的**直接**参数时才会触发。它不跨变量做污点追踪（taint-tracking），因此通过中间变量拼接而成的注入可能被漏掉。
 - **在非常大的项目上，一次扫描可能耗时约 20 秒**（逐检查项的 AST 遍历）。
 - **在大型代码库上的误报率尚未逐行核实。** 它以召回为导向，因此在大项目上要预期会有噪声，并据此分诊。
-- **各语言的深度并不均衡。** 部分检查项对 Python 最深入；Go / Java / JS / TS 则较浅。
+- **各语言的深度并不均衡。** 部分检查项对 Python 最深入；Go / Java / JS / TS / Swift 则较浅。
 - 它**不**运行你的代码，因此任何仅在运行时才暴露的问题都不在其覆盖范围内。（若需要结构性理解——入口点、谁写了什么、依赖关系图——请使用配套的 `code-map` 服务器。）
 
 ## 调优

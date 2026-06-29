@@ -6,7 +6,7 @@
 
 `code-map` 是一个只读的静态映射工具。它将源代码解析成语法树，并生成结构化的地图：什么导入了什么、定义了哪些符号、运行时入口点在哪里、存在哪些数据契约以及它们如何漂移、谁在写入文件 / 数据库 / 环境变量、风险热点在哪里、以及一次重构的自然边界落在何处。它用于*理解*一个代码库，而不是查找 bug（查 bug 请使用 `forensic-audit` 服务器）。
 
-支持的语言：**Python、Go、Java、JavaScript、TypeScript**。
+支持的语言：**Python、Go、Java、JavaScript、TypeScript、Swift**。
 
 ## 它能给你什么
 
@@ -68,7 +68,7 @@ C:\Users\You\path\to\vigil\.venv\Scripts\python.exe
 - **7 张地图中有 6 张零配置即可工作。**
 - **功能丰富的 `data_contract` 地图**，带漂移检测。
 - **准确的 structural 地图。**
-- **5 种语言**（Python、Go、Java、JS、TS）。
+- **6 种语言**（Python、Go、Java、JS、TS、Swift）。
 - **确定性**——语义 diff 忽略时间戳。
 - **摘要契合你的上下文预算。**
 

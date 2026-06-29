@@ -6,7 +6,7 @@ A structural mapper for codebases, exposed as an MCP server. You point it at a p
 
 `code-map` is a read-only static mapper. It parses your source into syntax trees and produces structured maps: what imports what, which symbols are defined, where the runtime entry points are, what data contracts exist and how they drift, who writes to files / DB / env, where the risk hotspots are, and where a refactor's natural boundaries lie. It is for *understanding* a codebase, not for finding bugs (use the `forensic-audit` server for that).
 
-Supported languages: **Python, Go, Java, JavaScript, TypeScript**.
+Supported languages: **Python, Go, Java, JavaScript, TypeScript, Swift**.
 
 ## What it gives you
 
@@ -68,7 +68,7 @@ The project root is auto-detected when you omit `path`.
 - **6 of 7 maps work with zero configuration.**
 - **Rich `data_contract` map** with drift detection.
 - **Accurate structural map.**
-- **5 languages** (Python, Go, Java, JS, TS).
+- **6 languages** (Python, Go, Java, JS, TS, Swift).
 - **Deterministic** — the semantic diff ignores timestamps.
 - **Summary fits your context budget.**
 
