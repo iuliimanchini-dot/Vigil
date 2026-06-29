@@ -13,13 +13,12 @@ Capabilities (pipeline wiring as of the authority-unify refactor):
       _authority_ast); LIVE -- authority_builder routes Python writes through it
       (target resolution + provenance + os.replace/open/json.dump). The enriched
       AuthorityWriteCandidate carries resolved_target/provenance/operation.
-    - extract_runtime: AST implementation present, but the Python runtime map
-      still uses its dedicated builder (not yet unified -- needs the rich
-      _RuntimeVisitor merge logic).
+    - extract_runtime_results: runs the full _RuntimeVisitor (entry-point
+      cross-ref + side-effect merge); LIVE -- runtime_builder consumes it via
+      build_python_runtime_nodes.
 
-Structural + data_contract + authority maps route Python through the shared
-adapter path (like Go/Java/TS); the runtime map still uses its dedicated
-Python builder.
+All four maps (structural, data_contract, authority, runtime) route Python
+through the shared adapter path, like Go/Java/TS -- true 5-language parity.
 """
 from __future__ import annotations
 
@@ -44,11 +43,11 @@ _log = logging.getLogger(__name__)
 class PythonAdapter(RegexAdapterBase):
     """Python adapter using stdlib ``ast``.
 
-    extract_imports / extract_symbols / extract_contracts / extract_writer_calls
-    are fully implemented and LIVE in the pipeline (structural + data_contract +
-    authority maps route Python through them). extract_runtime is implemented
-    but the Python runtime map still uses its dedicated builder (not yet
-    unified -- needs the rich _RuntimeVisitor merge logic).
+    All capability methods are LIVE in the pipeline: extract_imports /
+    extract_symbols (structural), extract_contracts (data_contract),
+    extract_writer_calls (authority, via the _authority_ast resolver), and
+    extract_runtime_results (runtime, via _RuntimeVisitor). Python routes
+    through the shared adapter path for all four maps, like Go/Java/TS.
     """
 
     language = "python"
