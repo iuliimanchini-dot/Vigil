@@ -23,7 +23,7 @@ from vigil_forensic import run_forensic_audit
 _INSTRUCTIONS = """\
 forensic-audit - static code-quality forensic auditor. Finds real bugs, swallowed
 exceptions, security issues, oversized/over-nested code, and cross-file duplication
-across Python/Go/Java/JS/TS. Pure static analysis (tree-sitter/AST) - it never runs
+across Python/Go/Java/JS/TS/Swift. Pure static analysis (tree-sitter/AST) - it never runs
 the project or its tests.
 
 WHEN TO USE: when the user asks to audit a project, review code quality, or find

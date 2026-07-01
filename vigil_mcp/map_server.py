@@ -20,7 +20,7 @@ from vigil_mcp import _paths
 from vigil_mapper import run_map_build, load_repo_maps
 
 _INSTRUCTIONS = """\
-code-map - builds structural maps of a codebase across Python/Go/Java/JS/TS:
+code-map - builds structural maps of a codebase across Python/Go/Java/JS/TS/Swift:
 imports/dependencies, defined symbols, runtime entry points, data contracts,
 authority/write sites, risk hotspots, and refactor boundaries. Static analysis
 (tree-sitter/AST) - it never runs the project.
