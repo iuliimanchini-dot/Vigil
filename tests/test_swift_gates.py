@@ -118,7 +118,7 @@ class TestSwiftGatePipeline:
         result = run_swift_force_unwrap_checks(ctx)
         assert len(result.findings) == 2
         assert all(f.check_id == "swift.force_unwrap" for f in result.findings)
-        assert all(str(f.severity.value) == "medium" for f in result.findings)
+        assert all(str(f.severity.value) == "high" for f in result.findings)
 
     def test_iuo_gate_fires(self, tmp_path):
         ctx = _ctx_for_file(

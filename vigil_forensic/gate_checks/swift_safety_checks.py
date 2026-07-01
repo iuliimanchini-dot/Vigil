@@ -109,7 +109,7 @@ def _iuo_lines(text: str) -> list[int]:
 
 
 def run_swift_force_unwrap_checks(ctx: PostExecGateContext):
-    """Flag force-unwrap (``x!``) operators in Swift source (MEDIUM)."""
+    """Flag force-unwrap (``x!``) operators in Swift source (HIGH — runtime crash risk)."""
     findings = []
     for snapshot in _swift_snapshots(ctx):
         for line in _force_unwrap_lines(snapshot.text):
@@ -119,7 +119,7 @@ def run_swift_force_unwrap_checks(ctx: PostExecGateContext):
                 check_id=_FORCE_UNWRAP_CHECK,
                 category=GateCategory.RUNTIME_BEHAVIOR,
                 title="Swift force-unwrap of optional",
-                severity=GateSeverity.MEDIUM,
+                severity=GateSeverity.HIGH,
                 impact=GateImpact.WARN,
                 summary=(
                     f"{snapshot.path}:{line} force-unwraps an optional with `!`; "

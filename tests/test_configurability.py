@@ -56,18 +56,20 @@ def _make_mixed_severity_project(tmp_path: Path) -> Path:
     """A project that yields more than one severity level.
 
     - ``app.py`` (swallowing source) → two MEDIUM ``broad_except`` findings.
-    - ``huge.py`` (a 162-line function) → one HIGH ``size.function_too_large``
-      (exceeds the generic ``function_revise`` of 120 even with no profile;
-      tmp_path lives outside the repo so the ancestor-walk finds no profile).
+    - ``swallow.py`` (``except Exception: pass``) → one HIGH ``exception_swallow_scan``.
 
-    The heterogeneous set lets the severity-floor reduction be tested actively
-    rather than skipped.
+    The heterogeneous set (MEDIUM + HIGH) lets the severity-floor reduction be
+    tested actively rather than skipped. (Size findings are MEDIUM/LOW after the
+    risk-based severity recalibration, so a real HIGH source is used instead of
+    the former HIGH ``size.function_too_large``.)
     """
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "app.py").write_text(_SWALLOWING_SOURCE, encoding="utf-8")
-    body = "\n".join(f"    y{i} = {i}" for i in range(160))
-    (proj / "huge.py").write_text("def huge():\n" + body + "\n    return 1\n", encoding="utf-8")
+    (proj / "swallow.py").write_text(
+        "def g():\n    try:\n        risky()\n    except Exception:\n        pass\n",
+        encoding="utf-8",
+    )
     return proj
 
 
